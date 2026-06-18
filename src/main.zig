@@ -59,6 +59,14 @@ const App = struct {
     }
 
     fn startEscapeClear(self: *App) void {
+        self.cancelMove();
+        self.selection = null;
+        self.right_down = false;
+        self.right_anchor = null;
+        self.right_current = null;
+        self.left_down = false;
+        self.left_moved = false;
+        self.canvas.clearStage();
         self.escape_countdown = escape_clear_countdown_s;
     }
 

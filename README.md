@@ -28,7 +28,7 @@ loam --mcp
 
 it exposes `tools/list` and `tools/call`, with `loam_apply_selection` for rectangular text placement.
 
-current version: **0.1.5**
+current version: **0.1.6**
 
 ## install
 
@@ -382,4 +382,4 @@ src/version.zig
 
 `build.zig` reads that Zig constant and stamps both `loam` and `loam-mcp`. `build.zig.zon` is kept as a valid package version, but release tags and install assets are driven by the tag, not by a separate bump script.
 
-release tags should use `v0.1.5`, `v0.2.0`, etc. update the GitHub wiki at `https://github.com/darkhorseprojects/loam.wiki` separately.
+release tags should use `v0.1.6`, `v0.2.0`, etc. update the GitHub wiki at `https://github.com/darkhorseprojects/loam.wiki` separately.
