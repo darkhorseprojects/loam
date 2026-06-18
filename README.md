@@ -28,7 +28,7 @@ loam --mcp
 
 it exposes `tools/list` and `tools/call`, with `loam_apply_selection` for rectangular text placement.
 
-current version: **0.1.1**
+current version: **0.1.2**
 
 ## install
 
@@ -96,7 +96,7 @@ loam loads every `.lua` brush from these locations, sorted by file stem:
 - `/usr/local/share/loam/brushes`
 - `/usr/share/loam/brushes`
 
-after install, add user brushes with:
+the release installer also installs the bundled default brushes into the loam data dir, so the binary works from any cwd. after install, add user brushes with:
 
 ```sh
 mkdir -p ~/.config/loam/brushes
@@ -382,4 +382,4 @@ src/version.zig
 
 `build.zig` reads that Zig constant and stamps both `loam` and `loam-mcp`. `build.zig.zon` is kept as a valid package version, but release tags and install assets are driven by the tag, not by a separate bump script.
 
-release tags should use `v0.1.1`, `v0.2.0`, etc. update the GitHub wiki at `https://github.com/darkhorseprojects/loam.wiki` separately.
+release tags should use `v0.1.2`, `v0.2.0`, etc. update the GitHub wiki at `https://github.com/darkhorseprojects/loam.wiki` separately.
