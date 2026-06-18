@@ -39,6 +39,8 @@ from a release:
 curl -fsSL https://raw.githubusercontent.com/darkhorseprojects/loam/main/scripts/install.sh | sh
 ```
 
+release assets are built for Linux x86_64, Linux aarch64, and macOS aarch64. macOS x86_64 and BSD users should build from source for now.
+
 optional install location:
 
 ```sh

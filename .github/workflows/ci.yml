@@ -19,12 +19,15 @@ jobs:
           - label: linux-x86_64
             os: ubuntu-latest
             target: x86_64-linux
+            runnable: true
           - label: linux-aarch64
             os: ubuntu-latest
             target: aarch64-linux
+            runnable: false
           - label: macos-aarch64
             os: macos-14
             target: aarch64-macos
+            runnable: true
 
     steps:
       - uses: actions/checkout@v4
@@ -32,10 +35,13 @@ jobs:
         with:
           version: 0.16.0
       - name: build
-        run: zig build
+        run: zig build -Dtarget=${{ matrix.target }}
       - name: test
+        if: matrix.runnable
         run: zig build test
       - name: help
+        if: matrix.runnable
         run: ./zig-out/bin/loam --help
       - name: list
+        if: matrix.runnable
         run: ./zig-out/bin/loam --list

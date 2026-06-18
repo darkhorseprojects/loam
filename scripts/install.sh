@@ -44,7 +44,10 @@ case "$(uname -s)" in
         ;;
     esac
     ;;
-  FreeBSD|OpenBSD|NetBSD|DragonFly) os="bsd" ;;
+  FreeBSD|OpenBSD|NetBSD|DragonFly)
+    echo "BSD release assets are not built yet; build from source for now" >&2
+    exit 1
+    ;;
   *)
     echo "unsupported OS: $(uname -s)" >&2
     exit 1

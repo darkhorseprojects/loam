@@ -127,7 +127,13 @@ the terminal backend is POSIX-oriented:
 - macOS
 - BSD targets with `TIOCGWINSZ`
 
-Windows is not supported yet because raw terminal IO, mouse reporting, alternate screen, and clipboard behavior need a separate console backend.
+release assets are currently built for:
+
+- Linux x86_64
+- Linux aarch64
+- macOS aarch64
+
+macOS x86_64 and BSD users should build from source for now. Windows is not supported yet because raw terminal IO, mouse reporting, alternate screen, and clipboard behavior need a separate console backend.
 
 ## renderer / Lua boundary update
 
