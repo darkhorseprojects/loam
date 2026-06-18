@@ -21,18 +21,15 @@ no TUI framework is used.
 
 ## canvas.zig
 
-owns the renderable world:
+owns durable canvas data:
 
 - terminal-cell grid
 - UTF-8 cell storage
 - persistent world plus viewport
-- stage preview layer
-- selection rectangle
+- Lua brush stage preview layer
 - particle array
-- reverse-video selection highlight
-- renderer
 
-the canvas does not know about brushes. it only stores cells and particles.
+the canvas does not know about brushes, selection, moves, or terminal output. it only stores cells and particles.
 
 ## lua_bridge.zig
 
@@ -40,12 +37,26 @@ owns the Lua VM and boundary:
 
 - creates one `ctx` table per paint call
 - pushes lightweight event tables
-- exposes drawing, particles, time, random, and size
+- exposes per-cell drawing, bulk drawing, particles, time, random, and size
 - loads the selected brush file
 - calls `brush.paint(ctx, event)`
 - calls `brush.preview(ctx, width, height)` for the corner panel
 
 Lua never reaches into Zig memory directly. Zig never encodes brush behavior.
+
+## renderer.zig
+
+owns the visible terminal frame:
+
+- builds base cells from canvas and brush stage
+- applies particles
+- applies moving-selection overlay without mutating the world
+- applies preview/countdown UI
+- applies selection reverse-video last
+- diffs the next frame against the previous frame
+- writes only changed terminal cells
+
+terminal output remains single-writer. compute can become worker-backed later, but renderer state is still one owner.
 
 ## main.zig
 
@@ -59,8 +70,8 @@ owns the app loop:
 - scroll wheel cycles the active brush and reloads Lua
 - maintain internal clipboard
 - run frame events only when needed
-- render after every input/frame tick
-- handle escape-hold clear countdown
+- ask the renderer to diff and patch visible cells after input/frame ticks
+- handle escape cancel and repeated-escape clear countdown
 
 ## brush set
 
@@ -83,7 +94,7 @@ right drag selects a rectangle. right release copies the selected cells as text 
 
 middle click or `v` pastes the internal clipboard as a Lua `paste` event.
 
-left drag inside a right-click selection moves those cells. the world is not changed until release commits the move.
+left drag inside a right-click selection moves those cells through a visual overlay. the world is not changed until release commits the move.
 
 ## color
 
@@ -98,6 +109,7 @@ loam uses a long-lived arena for app-owned data and keeps per-frame allocations 
 - MCP messages use a freeing allocator and deinitialize parsed JSON
 - particles are stored in a Zig array; Lua receives numeric indices instead of allocating per-particle Lua tables
 - staged previews are a fixed-size canvas layer, not a Lua table of cells
+- moved selections are rendered as an overlay, not written into the canvas stage
 
 ## input and security boundary
 

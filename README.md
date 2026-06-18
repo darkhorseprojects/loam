@@ -5,9 +5,10 @@ loam is a fullscreen terminal-cell painter written in Zig 0.16.0. every brush is
 the engine is intentionally boring:
 
 - raw terminal mode, alternate screen, mouse input, paste, resize
-- a persistent cell canvas plus a temporary staged preview layer
-- rectangular selection, copy, paste, and moving selected cells
-- a narrow Lua API for reading/writing cells, particles, time, and random values
+- a persistent cell canvas plus Lua's temporary brush stage
+- rectangular selection, copy, paste, and visual-only moving selected cells
+- a diffing renderer that patches changed terminal cells instead of clearing every frame
+- a narrow Lua API for reading/writing cells, bulk drawing, particles, time, and random values
 
 Lua owns the interesting part:
 
@@ -82,7 +83,8 @@ zig build run -- --list
 | `c` | clear canvas and particles |
 | `r` | clear selection / cancel move |
 | `q` | quit |
-| hold `esc` | top-left countdown `3 2 1`, then clear canvas instead of quitting |
+| `esc` | cancel the active drag/move/selection gesture |
+| repeated/held `esc` | top-left countdown `3 2 1`, then clear canvas instead of quitting |
 
 ## brush folders
 
@@ -382,4 +384,4 @@ src/version.zig
 
 `build.zig` reads that Zig constant and stamps both `loam` and `loam-mcp`. `build.zig.zon` is kept as a valid package version, but release tags and install assets are driven by the tag, not by a separate bump script.
 
-release tags should use `v0.1.7`, `v0.2.0`, etc. update the GitHub wiki at `https://github.com/darkhorseprojects/loam.wiki` separately.
+release tags should use `v0.1.7`, `v0.2.0`, etc. while a release is still being corrected, recut that broken tag instead of bumping for every failed attempt. update the GitHub wiki at `https://github.com/darkhorseprojects/loam.wiki` separately.

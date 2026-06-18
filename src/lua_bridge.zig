@@ -135,6 +135,9 @@ pub const LuaBridge = struct {
 
         inline for (.{
             .{ "set", zlua.wrap(ctxSet) },
+            .{ "line", zlua.wrap(ctxLine) },
+            .{ "fill", zlua.wrap(ctxFill) },
+            .{ "rect", zlua.wrap(ctxRect) },
             .{ "emit", zlua.wrap(ctxEmit) },
             .{ "spawn", zlua.wrap(ctxEmit) },
             .{ "get", zlua.wrap(ctxGet) },
@@ -277,6 +280,74 @@ fn ctxSet(lua: *Lua) i32 {
     const ok = x < b.canvas.world.width and y < b.canvas.world.height;
     if (ok) b.canvas.set(x, y, argGlyph(lua, 3));
     lua.pushBoolean(ok);
+    return 1;
+}
+
+fn ctxLine(lua: *Lua) i32 {
+    const b = bridgeFromLua(lua);
+    var x0 = argInt(lua, 1, 1) - 1;
+    var y0 = argInt(lua, 2, 1) - 1;
+    const x1 = argInt(lua, 3, 1) - 1;
+    const y1 = argInt(lua, 4, 1) - 1;
+    const glyph = argGlyph(lua, 5);
+    const dx: isize = @intCast(@abs(x1 - x0));
+    const sx: isize = if (x0 < x1) 1 else -1;
+    const dy: isize = -@as(isize, @intCast(@abs(y1 - y0)));
+    const sy: isize = if (y0 < y1) 1 else -1;
+    var err: isize = dx + dy;
+
+    while (true) {
+        if (x0 >= 0 and y0 >= 0) b.canvas.set(@intCast(x0), @intCast(y0), glyph);
+        if (x0 == x1 and y0 == y1) break;
+        const e2 = 2 * err;
+        if (e2 >= dy) {
+            err += dy;
+            x0 += sx;
+        }
+        if (e2 <= dx) {
+            err += dx;
+            y0 += sy;
+        }
+    }
+
+    lua.pushBoolean(true);
+    return 1;
+}
+
+fn ctxFill(lua: *Lua) i32 {
+    const b = bridgeFromLua(lua);
+    const x = cellIndex(lua, 1, 1);
+    const y = cellIndex(lua, 2, 1);
+    const width: usize = @intCast(@max(argInt(lua, 3, 1), 1));
+    const height: usize = @intCast(@max(argInt(lua, 4, 1), 1));
+    const glyph = argGlyph(lua, 5);
+    var row: usize = 0;
+    while (row < height) : (row += 1) {
+        var col: usize = 0;
+        while (col < width) : (col += 1) b.canvas.set(x + col, y + row, glyph);
+    }
+    lua.pushBoolean(true);
+    return 1;
+}
+
+fn ctxRect(lua: *Lua) i32 {
+    const b = bridgeFromLua(lua);
+    const x = cellIndex(lua, 1, 1);
+    const y = cellIndex(lua, 2, 1);
+    const width: usize = @intCast(@max(argInt(lua, 3, 1), 1));
+    const height: usize = @intCast(@max(argInt(lua, 4, 1), 1));
+    const edge = argGlyph(lua, 5);
+    const fill = if (lua.typeOf(6) == .nil) null else argGlyph(lua, 6);
+
+    var row: usize = 0;
+    while (row < height) : (row += 1) {
+        var col: usize = 0;
+        while (col < width) : (col += 1) {
+            const border = row == 0 or col == 0 or row + 1 == height or col + 1 == width;
+            if (border) b.canvas.set(x + col, y + row, edge) else if (fill) |glyph| b.canvas.set(x + col, y + row, glyph);
+        }
+    }
+    lua.pushBoolean(true);
     return 1;
 }
 

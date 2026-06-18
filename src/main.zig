@@ -4,6 +4,7 @@ const canvas_mod = @import("canvas.zig");
 const terminal_mod = @import("terminal.zig");
 const lua_bridge_mod = @import("lua_bridge.zig");
 const brushes_mod = @import("brushes.zig");
+const renderer_mod = @import("renderer.zig");
 const mcp_mod = @import("mcp.zig");
 const version_mod = @import("version.zig");
 
@@ -13,6 +14,7 @@ const Selection = canvas_mod.Selection;
 const Lua = zlua.Lua;
 const LuaBridge = lua_bridge_mod.LuaBridge;
 const BrushSet = brushes_mod.BrushSet;
+const Renderer = renderer_mod.Renderer;
 
 const Point = struct {
     x: usize,
@@ -22,6 +24,7 @@ const Point = struct {
 const MoveState = struct {
     selection: Selection,
     anchor: Point,
+    at: Point,
 };
 
 const brush_scroll_cooldown_s = 0.35;
@@ -33,6 +36,7 @@ const App = struct {
     allocator: std.mem.Allocator,
     terminal: terminal_mod.Terminal,
     canvas: Canvas,
+    renderer: Renderer,
     bridge: LuaBridge,
     brushes: *BrushSet,
     clipboard: std.ArrayList(u8),
@@ -55,10 +59,12 @@ const App = struct {
 
     fn render(self: *App, now: f64) !void {
         try self.syncTerminalSize(now);
-        try self.canvas.render(&self.terminal.writer.interface);
-        try self.drawCountdown();
-        try self.drawPreview();
-        try self.canvas.renderSelection(&self.terminal.writer.interface, self.selection);
+        const preview = try self.previewText();
+        const countdown = if (self.escape_countdown > 0)
+            @as(usize, @intFromFloat(@ceil(self.escape_countdown / escape_clear_step_s)))
+        else
+            null;
+        try self.renderer.render(&self.terminal.writer.interface, &self.canvas, self.selection, self.moveOverlay(), .{ .countdown = countdown, .preview = preview });
         try self.terminal.writer.interface.flush();
     }
 
@@ -114,36 +120,35 @@ const App = struct {
         if (size.cols == self.canvas.viewport.width and size.rows == self.canvas.viewport.height) return;
         self.cancelMove();
         try self.canvas.resize(size.cols, size.rows);
+        try self.renderer.resize(size.cols, size.rows);
         self.selection = null;
         self.right_down = false;
         self.right_anchor = null;
         self.right_current = null;
     }
 
-    fn drawCountdown(self: *App) !void {
-        if (self.escape_countdown <= 0) return;
-        const n = @as(usize, @intFromFloat(@ceil(self.escape_countdown / escape_clear_step_s)));
-        const writer = &self.terminal.writer.interface;
-        try writer.print("\x1b[1;1H\x1b[7m escape clear {d} \x1b[0m", .{n});
-    }
-
-    fn drawPreview(self: *App) !void {
+    fn previewText(self: *App) !?[]const u8 {
         const box_w: usize = 24;
         const box_h: usize = 5;
-        if (self.canvas.viewport.width < box_w + 2 or self.canvas.viewport.height < box_h + 2) return;
-        if (!try self.bridge.preview(box_w, box_h, &self.preview_buf)) return;
+        if (self.canvas.viewport.width < box_w + 2 or self.canvas.viewport.height < box_h + 2) return null;
+        if (!try self.bridge.preview(box_w, box_h, &self.preview_buf)) return null;
+        return self.preview_buf.items;
+    }
 
-        const x = self.canvas.viewport.width - box_w - 1;
-        const y: usize = 1;
-        const writer = &self.terminal.writer.interface;
-        var rows = std.mem.splitScalar(u8, self.preview_buf.items, '\n');
-        var row: usize = 0;
-        while (row < box_h) : (row += 1) {
-            const text = rows.next() orelse "";
-            try writer.print("\x1b[{d};{d}H", .{ y + row + 1, x + 1 });
-            try writePadded(writer, text, box_w);
-        }
-        try writer.writeAll("\x1b[0m");
+    fn moveOverlay(self: *const App) ?renderer_mod.MoveOverlay {
+        const moving = self.moving orelse return null;
+        const left = selectionLeft(moving.selection);
+        const top = selectionTop(moving.selection);
+        const dx = @as(isize, @intCast(moving.at.x)) - @as(isize, @intCast(moving.anchor.x));
+        const dy = @as(isize, @intCast(moving.at.y)) - @as(isize, @intCast(moving.anchor.y));
+        return .{
+            .source = moving.selection,
+            .left = @as(isize, @intCast(left)) + dx,
+            .top = @as(isize, @intCast(top)) + dy,
+            .width = selectionWidth(moving.selection),
+            .height = selectionHeight(moving.selection),
+            .cells = self.move_cells.items,
+        };
     }
 
     fn cycleBrush(self: *App, delta: isize) !void {
@@ -188,31 +193,12 @@ const App = struct {
                 try self.move_cells.append(self.allocator, self.canvas.getCell(x, y));
             }
         }
-        self.moving = .{ .selection = sel, .anchor = at };
-        try self.previewMove(at);
+        self.moving = .{ .selection = sel, .anchor = at, .at = at };
+        self.previewMove(at);
     }
 
-    fn previewMove(self: *App, at: Point) !void {
-        const moving = self.moving orelse return;
-        self.canvas.clearStage();
-        const dx = @as(isize, @intCast(at.x)) - @as(isize, @intCast(moving.anchor.x));
-        const dy = @as(isize, @intCast(at.y)) - @as(isize, @intCast(moving.anchor.y));
-        const left = selectionLeft(moving.selection);
-        const top = selectionTop(moving.selection);
-        const width = selectionWidth(moving.selection);
-        const height = selectionHeight(moving.selection);
-
-        var row: usize = 0;
-        while (row < height) : (row += 1) {
-            var col: usize = 0;
-            while (col < width) : (col += 1) {
-                self.stageWorldCell(left + col, top + row, Cell.space);
-                const cell = self.move_cells.items[row * width + col];
-                const world_x = @as(isize, @intCast(left + col)) + dx;
-                const world_y = @as(isize, @intCast(top + row)) + dy;
-                if (world_x >= 0 and world_y >= 0) self.stageWorldCell(@intCast(world_x), @intCast(world_y), cell);
-            }
-        }
+    fn previewMove(self: *App, at: Point) void {
+        if (self.moving) |*moving| moving.at = at;
     }
 
     fn finishMove(self: *App, at: Point) void {
@@ -306,7 +292,7 @@ const App = struct {
                         if (self.moving) |_| {
                             const at = Point{ .x = world_mouse.x, .y = world_mouse.y };
                             switch (mouse.action) {
-                                .press, .move => try self.previewMove(at),
+                                .press, .move => self.previewMove(at),
                                 .release => self.finishMove(at),
                             }
                         } else if (mouse.action == .press and self.selection != null and self.selection.?.contains(world_mouse.x, world_mouse.y)) {
@@ -416,6 +402,7 @@ pub fn main(init: std.process.Init) !void {
 
     const size = try terminal.size();
     var canvas = try Canvas.init(arena, size.cols, size.rows);
+    const renderer = try Renderer.init(arena, size.cols, size.rows);
 
     var prng = std.Random.DefaultPrng.init(0x10a57_5eed);
     const rng = prng.random();
@@ -430,6 +417,7 @@ pub fn main(init: std.process.Init) !void {
         .allocator = arena,
         .terminal = terminal,
         .canvas = canvas,
+        .renderer = renderer,
         .bridge = bridge,
         .brushes = &brushes,
         .clipboard = .empty,
@@ -440,6 +428,7 @@ pub fn main(init: std.process.Init) !void {
     app.bridge.register();
     try app.bridge.loadBrush(brushes.activePath());
     defer app.terminal.deinit() catch {};
+    defer app.renderer.deinit();
     defer app.canvas.deinit();
 
     var stdin_file = std.Io.File.stdin();
@@ -498,8 +487,9 @@ fn usage() !void {
         \\  v               paste at the last mouse position
         \\  c               clear the canvas and particles
         \\  r               clear the selection
+        \\  esc             cancel active drag / move / selection
+        \\  repeated esc    clear after countdown
         \\  q               quit
-        \\  hold esc        clear after countdown
         \\
         \\
     , .{});

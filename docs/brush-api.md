@@ -38,9 +38,10 @@ Zig owns:
 - canvas/world memory
 - particles storage
 - selection/copy/paste/move
+- visual move overlays
 - brush discovery
 - event routing
-- rendering and flushing
+- diff rendering and flushing
 
 Lua brushes are trusted local code. do not install brushes from sources you do not trust.
 
@@ -60,10 +61,13 @@ use `event.world_x` and `event.world_y` for painting. `event.x` and `event.y` ar
 ```lua
 ctx.set(x, y, glyph)        -- returns true if the cell exists
 local glyph = ctx.get(x, y) -- returns " " outside the canvas
+ctx.line(x0, y0, x1, y1, glyph)
+ctx.fill(x, y, width, height, glyph)
+ctx.rect(x, y, width, height, edge_glyph, fill_glyph_or_nil)
 ctx.clear()                 -- clears canvas and particles
 ```
 
-`glyph` is a Lua string. the canvas stores up to 8 UTF-8 bytes per cell.
+`glyph` is a Lua string. the canvas stores up to 8 UTF-8 bytes per cell. Prefer `line`, `fill`, and `rect` for hot paths: Lua chooses the brush intent, Zig touches cells in bulk.
 
 ## staged previews
 

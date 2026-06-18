@@ -289,6 +289,18 @@ pub const Canvas = struct {
         return self.world.particles.items.len;
     }
 
+    pub fn particles(self: *const Canvas) []const Particle {
+        return self.world.particles.items;
+    }
+
+    pub fn viewportX(self: *const Canvas) usize {
+        return self.viewport.x;
+    }
+
+    pub fn viewportY(self: *const Canvas) usize {
+        return self.viewport.y;
+    }
+
     pub fn viewportToWorldX(self: *const Canvas, x: usize) usize {
         return @min(self.viewport.x + x, self.world.width -| 1);
     }
