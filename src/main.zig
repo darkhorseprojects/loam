@@ -431,7 +431,11 @@ pub fn main(init: std.process.Init) !void {
         const dt = @min(now - last_time, 0.05);
         last_time = now;
 
-        if (app.bridge.wantsFrames()) {
+        const had_countdown = app.escape_countdown > 0;
+        app.updateEscapeClear(dt);
+        if (had_countdown) {
+            try app.render();
+        } else if (app.bridge.wantsFrames()) {
             try app.bridge.paint(.frame, dt, now);
             try app.render();
         }
