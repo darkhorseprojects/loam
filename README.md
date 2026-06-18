@@ -5,7 +5,7 @@ loam is a fullscreen terminal-cell painter written in Zig 0.16.0. every brush is
 the engine is intentionally boring:
 
 - raw terminal mode, alternate screen, mouse input, paste, resize
-- a persistent cell canvas plus Lua's temporary brush stage
+- a persistent cell canvas plus a renderer-owned brush overlay
 - rectangular selection, copy, paste, and visual-only moving selected cells
 - a diffing renderer that patches changed terminal cells instead of clearing every frame
 - a narrow Lua API for reading/writing cells, bulk drawing, particles, time, and random values
@@ -385,3 +385,9 @@ src/version.zig
 `build.zig` reads that Zig constant and stamps both `loam` and `loam-mcp`. `build.zig.zon` is kept as a valid package version, but release tags and install assets are driven by the tag, not by a separate bump script.
 
 release tags should use `v0.1.7`, `v0.2.0`, etc. while a release is still being corrected, recut that broken tag instead of bumping for every failed attempt. update the GitHub wiki at `https://github.com/darkhorseprojects/loam.wiki` separately.
+
+## current architecture line
+
+rendering never calls Lua. brush previews are rebuilt by the brush host after brush load or brush events, then cached as cells. the renderer composes durable canvas cells, particles, brush overlay, move overlay, selection, countdown, and cached preview into a diffed terminal frame.
+
+canvas owns only durable cells and particles. selection, moves, preview, and brush drag overlays are visual/editor state, not canvas state.

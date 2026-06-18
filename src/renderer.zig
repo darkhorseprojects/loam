@@ -3,7 +3,7 @@ const canvas_mod = @import("canvas.zig");
 
 const Canvas = canvas_mod.Canvas;
 const Cell = canvas_mod.Cell;
-const Particle = canvas_mod.Particle;
+const Overlay = canvas_mod.Overlay;
 const Selection = canvas_mod.Selection;
 
 const DisplayCell = struct {
@@ -11,7 +11,7 @@ const DisplayCell = struct {
     reverse: bool = false,
 
     fn eql(a: DisplayCell, b: DisplayCell) bool {
-        return a.reverse == b.reverse and a.cell.len == b.cell.len and std.mem.eql(u8, a.cell.slice(), b.cell.slice());
+        return a.reverse == b.reverse and Cell.eql(a.cell, b.cell);
     }
 };
 
@@ -19,14 +19,7 @@ pub const MoveOverlay = struct {
     source: Selection,
     left: isize,
     top: isize,
-    width: usize,
-    height: usize,
     cells: []const Cell,
-};
-
-pub const UiOverlay = struct {
-    countdown: ?usize = null,
-    preview: ?[]const u8 = null,
 };
 
 pub const Renderer = struct {
@@ -35,7 +28,7 @@ pub const Renderer = struct {
     height: usize,
     prev: []DisplayCell,
     next: []DisplayCell,
-    full_redraw: bool = true,
+    full: bool = true,
 
     pub fn init(allocator: std.mem.Allocator, width: usize, height: usize) !Renderer {
         const w = @max(width, 1);
@@ -67,129 +60,114 @@ pub const Renderer = struct {
         @memset(self.next, DisplayCell{});
         self.width = w;
         self.height = h;
-        self.full_redraw = true;
+        self.full = true;
     }
 
-    pub fn render(self: *Renderer, writer: *std.Io.Writer, canvas: *const Canvas, selection: ?Selection, move: ?MoveOverlay, ui: UiOverlay) !void {
-        self.build(canvas, selection, move, ui);
-        if (self.full_redraw) {
+    pub fn render(self: *Renderer, writer: *std.Io.Writer, canvas: *const Canvas, brush_overlay: *const Overlay, preview: *const Overlay, selection: ?Selection, move: ?MoveOverlay, countdown: ?usize) !void {
+        self.compose(canvas, brush_overlay, preview, selection, move, countdown);
+        if (self.full) {
             try writer.writeAll("\x1b[2J");
             @memset(self.prev, DisplayCell{});
+            self.full = false;
         }
-        try self.flushDiff(writer);
-        self.full_redraw = false;
+        try self.flush(writer);
     }
 
-    fn build(self: *Renderer, canvas: *const Canvas, selection: ?Selection, move: ?MoveOverlay, ui: UiOverlay) void {
+    fn compose(self: *Renderer, canvas: *const Canvas, brush_overlay: *const Overlay, preview: *const Overlay, selection: ?Selection, move: ?MoveOverlay, countdown: ?usize) void {
         var y: usize = 0;
         while (y < self.height) : (y += 1) {
             var x: usize = 0;
-            while (x < self.width) : (x += 1) {
-                self.at(x, y).* = .{ .cell = Cell.init(canvas.cellAtViewport(x, y)), .reverse = false };
-            }
+            while (x < self.width) : (x += 1) self.put(x, y, canvas.cellAtViewport(x, y), false);
         }
-
         self.applyParticles(canvas);
+        self.applyBrushOverlay(brush_overlay);
         if (move) |m| self.applyMove(canvas, m);
-        self.applyPreview(ui.preview);
-        self.applyCountdown(ui.countdown);
-        self.applySelection(canvas, if (move) |m| translatedSelection(m) else selection);
+        self.applyPreview(preview);
+        self.applyCountdown(countdown);
+        self.applySelection(canvas, if (move) |m| moveSelection(m) else selection);
     }
 
-    fn at(self: *Renderer, x: usize, y: usize) *DisplayCell {
-        return &self.next[y * self.width + x];
-    }
-
-    fn set(self: *Renderer, x: usize, y: usize, cell: Cell, reverse: bool) void {
+    fn put(self: *Renderer, x: usize, y: usize, cell: Cell, reverse: bool) void {
         if (x >= self.width or y >= self.height) return;
-        self.at(x, y).* = .{ .cell = cell, .reverse = reverse };
+        self.next[y * self.width + x] = .{ .cell = cell, .reverse = reverse };
+    }
+
+    fn putWorld(self: *Renderer, canvas: *const Canvas, x: usize, y: usize, cell: Cell, reverse: bool) void {
+        if (x < canvas.viewport_x or y < canvas.viewport_y) return;
+        self.put(x - canvas.viewport_x, y - canvas.viewport_y, cell, reverse);
     }
 
     fn applyParticles(self: *Renderer, canvas: *const Canvas) void {
-        for (canvas.particles()) |p| {
-            const px: isize = @intFromFloat(@round(p.x));
-            const py: isize = @intFromFloat(@round(p.y));
-            const sx = px - @as(isize, @intCast(canvas.viewportX()));
-            const sy = py - @as(isize, @intCast(canvas.viewportY()));
-            if (sx < 0 or sy < 0) continue;
-            self.set(@intCast(sx), @intCast(sy), p.glyph, false);
+        for (canvas.particles.items) |p| {
+            const sx = @as(isize, @intFromFloat(@round(p.x))) - @as(isize, @intCast(canvas.viewport_x));
+            const sy = @as(isize, @intFromFloat(@round(p.y))) - @as(isize, @intCast(canvas.viewport_y));
+            if (sx >= 0 and sy >= 0) self.put(@intCast(sx), @intCast(sy), p.glyph, false);
+        }
+    }
+
+    fn applyBrushOverlay(self: *Renderer, overlay: *const Overlay) void {
+        const h = @min(self.height, overlay.height);
+        const w = @min(self.width, overlay.width);
+        var y: usize = 0;
+        while (y < h) : (y += 1) {
+            var x: usize = 0;
+            while (x < w) : (x += 1) if (overlay.get(x, y)) |cell| self.put(x, y, cell, false);
         }
     }
 
     fn applyMove(self: *Renderer, canvas: *const Canvas, move: MoveOverlay) void {
-        const source_left = @min(move.source.x0, move.source.x1);
-        const source_top = @min(move.source.y0, move.source.y1);
-
-        var row: usize = 0;
-        while (row < move.height) : (row += 1) {
-            var col: usize = 0;
-            while (col < move.width) : (col += 1) self.setWorld(canvas, source_left + col, source_top + row, Cell.space, false);
+        const w = move.source.width();
+        const h = move.source.height();
+        var y: usize = 0;
+        while (y < h) : (y += 1) {
+            var x: usize = 0;
+            while (x < w) : (x += 1) self.putWorld(canvas, move.source.left() + x, move.source.top() + y, Cell.space, false);
         }
-
-        row = 0;
-        while (row < move.height) : (row += 1) {
-            var col: usize = 0;
-            while (col < move.width) : (col += 1) {
-                const x = move.left + @as(isize, @intCast(col));
-                const y = move.top + @as(isize, @intCast(row));
-                if (x >= 0 and y >= 0) self.setWorld(canvas, @intCast(x), @intCast(y), move.cells[row * move.width + col], false);
+        y = 0;
+        while (y < h) : (y += 1) {
+            var x: usize = 0;
+            while (x < w) : (x += 1) {
+                const wx = move.left + @as(isize, @intCast(x));
+                const wy = move.top + @as(isize, @intCast(y));
+                if (wx >= 0 and wy >= 0) self.putWorld(canvas, @intCast(wx), @intCast(wy), move.cells[y * w + x], false);
             }
         }
     }
 
-    fn setWorld(self: *Renderer, canvas: *const Canvas, world_x: usize, world_y: usize, cell: Cell, reverse: bool) void {
-        if (world_x < canvas.viewportX() or world_y < canvas.viewportY()) return;
-        const x = world_x - canvas.viewportX();
-        const y = world_y - canvas.viewportY();
-        self.set(x, y, cell, reverse);
-    }
-
-    fn applyPreview(self: *Renderer, text: ?[]const u8) void {
-        const frame = text orelse return;
-        const box_w: usize = 24;
-        const box_h: usize = 5;
-        if (self.width < box_w + 2 or self.height < box_h + 2) return;
-        const left = self.width - box_w - 1;
+    fn applyPreview(self: *Renderer, preview: *const Overlay) void {
+        if (self.width < preview.width + 2 or self.height < preview.height + 2) return;
+        const left = self.width - preview.width - 1;
         const top: usize = 1;
-        var rows = std.mem.splitScalar(u8, frame, '\n');
-        var row: usize = 0;
-        while (row < box_h) : (row += 1) {
-            const src = rows.next() orelse "";
-            var col: usize = 0;
-            while (col < box_w) : (col += 1) {
-                const glyph = if (col < src.len) src[col .. col + 1] else " ";
-                self.set(left + col, top + row, Cell.init(glyph), false);
-            }
+        var y: usize = 0;
+        while (y < preview.height) : (y += 1) {
+            var x: usize = 0;
+            while (x < preview.width) : (x += 1) self.put(left + x, top + y, preview.get(x, y) orelse Cell.space, false);
         }
     }
 
-    fn applyCountdown(self: *Renderer, countdown: ?usize) void {
-        const n = countdown orelse return;
+    fn applyCountdown(self: *Renderer, n: ?usize) void {
+        const value = n orelse return;
         var buf: [32]u8 = undefined;
-        const text = std.fmt.bufPrint(&buf, " escape clear {d} ", .{n}) catch return;
+        const text = std.fmt.bufPrint(&buf, " escape clear {d} ", .{value}) catch return;
         var x: usize = 0;
-        while (x < text.len and x < self.width) : (x += 1) self.set(x, 0, Cell.init(text[x .. x + 1]), true);
+        while (x < text.len and x < self.width) : (x += 1) self.put(x, 0, Cell.init(text[x .. x + 1]), true);
     }
 
     fn applySelection(self: *Renderer, canvas: *const Canvas, selection: ?Selection) void {
-        const sel = selection orelse return;
-        const left = @max(@min(sel.x0, sel.x1), canvas.viewportX());
-        const top = @max(@min(sel.y0, sel.y1), canvas.viewportY());
-        const right = @min(@max(sel.x0, sel.x1), canvas.viewportX() + self.width -| 1);
-        const bottom = @min(@max(sel.y0, sel.y1), canvas.viewportY() + self.height -| 1);
+        const s = selection orelse return;
+        const left = @max(s.left(), canvas.viewport_x);
+        const top = @max(s.top(), canvas.viewport_y);
+        const right = @min(s.right(), canvas.viewport_x + self.width -| 1);
+        const bottom = @min(s.bottom(), canvas.viewport_y + self.height -| 1);
         if (left > right or top > bottom) return;
         var y = top;
         while (y <= bottom) : (y += 1) {
             var x = left;
-            while (x <= right) : (x += 1) {
-                const sx = x - canvas.viewportX();
-                const sy = y - canvas.viewportY();
-                self.at(sx, sy).reverse = true;
-            }
+            while (x <= right) : (x += 1) self.next[(y - canvas.viewport_y) * self.width + (x - canvas.viewport_x)].reverse = true;
         }
     }
 
-    fn flushDiff(self: *Renderer, writer: *std.Io.Writer) !void {
+    fn flush(self: *Renderer, writer: *std.Io.Writer) !void {
         var reverse = false;
         var y: usize = 0;
         while (y < self.height) : (y += 1) {
@@ -202,15 +180,14 @@ pub const Renderer = struct {
                 }
                 try writer.print("\x1b[{d};{d}H", .{ y + 1, x + 1 });
                 while (x < self.width) : (x += 1) {
-                    const run_idx = y * self.width + x;
-                    if (x != 0 and DisplayCell.eql(self.prev[run_idx], self.next[run_idx])) break;
-                    const cell = self.next[run_idx];
-                    if (cell.reverse != reverse) {
-                        try writer.writeAll(if (cell.reverse) "\x1b[7m" else "\x1b[27m");
-                        reverse = cell.reverse;
+                    const i = y * self.width + x;
+                    if (x != 0 and DisplayCell.eql(self.prev[i], self.next[i])) break;
+                    if (self.next[i].reverse != reverse) {
+                        try writer.writeAll(if (self.next[i].reverse) "\x1b[7m" else "\x1b[27m");
+                        reverse = self.next[i].reverse;
                     }
-                    try writer.writeAll(cell.cell.slice());
-                    self.prev[run_idx] = cell;
+                    try writer.writeAll(self.next[i].cell.slice());
+                    self.prev[i] = self.next[i];
                 }
             }
         }
@@ -219,9 +196,11 @@ pub const Renderer = struct {
     }
 };
 
-fn translatedSelection(move: MoveOverlay) Selection {
-    const right = move.left + @as(isize, @intCast(move.width - 1));
-    const bottom = move.top + @as(isize, @intCast(move.height - 1));
+fn moveSelection(move: MoveOverlay) Selection {
+    const w = move.source.width();
+    const h = move.source.height();
+    const right = move.left + @as(isize, @intCast(w - 1));
+    const bottom = move.top + @as(isize, @intCast(h - 1));
     return .{
         .x0 = if (move.left < 0) 0 else @intCast(move.left),
         .y0 = if (move.top < 0) 0 else @intCast(move.top),

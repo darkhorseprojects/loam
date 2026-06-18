@@ -24,6 +24,45 @@ pub const Cell = struct {
     pub fn slice(self: *const Cell) []const u8 {
         return self.bytes[0..self.len];
     }
+
+    pub fn eql(a: Cell, b: Cell) bool {
+        return a.len == b.len and std.mem.eql(u8, a.slice(), b.slice());
+    }
+};
+
+pub const Selection = struct {
+    x0: usize,
+    y0: usize,
+    x1: usize,
+    y1: usize,
+
+    pub fn left(self: Selection) usize {
+        return @min(self.x0, self.x1);
+    }
+
+    pub fn right(self: Selection) usize {
+        return @max(self.x0, self.x1);
+    }
+
+    pub fn top(self: Selection) usize {
+        return @min(self.y0, self.y1);
+    }
+
+    pub fn bottom(self: Selection) usize {
+        return @max(self.y0, self.y1);
+    }
+
+    pub fn width(self: Selection) usize {
+        return self.right() - self.left() + 1;
+    }
+
+    pub fn height(self: Selection) usize {
+        return self.bottom() - self.top() + 1;
+    }
+
+    pub fn contains(self: Selection, x: usize, y: usize) bool {
+        return x >= self.left() and x <= self.right() and y >= self.top() and y <= self.bottom();
+    }
 };
 
 pub const Particle = struct {
@@ -37,343 +76,168 @@ pub const Particle = struct {
     seed: u32 = 0,
 };
 
-pub const Selection = struct {
-    x0: usize,
-    y0: usize,
-    x1: usize,
-    y1: usize,
-
-    pub fn contains(self: Selection, x: usize, y: usize) bool {
-        const lx = @min(self.x0, self.x1);
-        const rx = @max(self.x0, self.x1);
-        const ty = @min(self.y0, self.y1);
-        const by = @max(self.y0, self.y1);
-        return x >= lx and x <= rx and y >= ty and y <= by;
-    }
-};
-
-const World = struct {
-    allocator: std.mem.Allocator,
-    cells: []Cell,
-    particles: std.ArrayList(Particle) = .empty,
-    width: usize,
-    height: usize,
-
-    fn init(allocator: std.mem.Allocator, width: usize, height: usize) !World {
-        const cells = try allocator.alloc(Cell, width * height);
-        @memset(cells, Cell.space);
-        return .{ .allocator = allocator, .cells = cells, .width = width, .height = height };
-    }
-
-    fn deinit(self: *World) void {
-        self.allocator.free(self.cells);
-        self.particles.deinit(self.allocator);
-        self.* = undefined;
-    }
-
-    fn clear(self: *World) void {
-        @memset(self.cells, Cell.space);
-        self.particles.clearRetainingCapacity();
-    }
-
-    fn growTo(self: *World, width: usize, height: usize) !void {
-        if (width <= self.width and height <= self.height) return;
-
-        const next_width = @max(width, self.width);
-        const next_height = @max(height, self.height);
-        const next = try self.allocator.alloc(Cell, next_width * next_height);
-        @memset(next, Cell.space);
-
-        var y: usize = 0;
-        while (y < self.height) : (y += 1) {
-            @memcpy(next[y * next_width .. y * next_width + self.width], self.cells[y * self.width .. y * self.width + self.width]);
-        }
-
-        self.allocator.free(self.cells);
-        self.cells = next;
-        self.width = next_width;
-        self.height = next_height;
-    }
-
-    fn set(self: *World, x: usize, y: usize, glyph: []const u8) void {
-        if (x >= self.width or y >= self.height) return;
-        self.cells[y * self.width + x].set(glyph);
-    }
-
-    fn get(self: *const World, x: usize, y: usize) []const u8 {
-        if (x >= self.width or y >= self.height) return Cell.space.slice();
-        return self.cells[y * self.width + x].slice();
-    }
-
-    fn addParticle(self: *World, allocator: std.mem.Allocator, p: Particle) !void {
-        try self.particles.append(allocator, p);
-    }
-
-    fn removeParticle(self: *World, index: usize) bool {
-        if (index >= self.particles.items.len) return false;
-        _ = self.particles.swapRemove(index);
-        return true;
-    }
-};
-
-const Viewport = struct {
-    x: usize = 0,
-    y: usize = 0,
-    width: usize,
-    height: usize,
-
-    fn clampToWorld(self: *Viewport, world_width: usize, world_height: usize) void {
-        if (world_width == 0 or world_height == 0) return;
-        self.width = @max(self.width, 1);
-        self.height = @max(self.height, 1);
-        const max_x = if (world_width <= self.width) 0 else world_width - self.width;
-        const max_y = if (world_height <= self.height) 0 else world_height - self.height;
-        self.x = @min(self.x, max_x);
-        self.y = @min(self.y, max_y);
-    }
-};
-
-const StageCell = struct {
-    cell: Cell = Cell.space,
+pub const OverlayCell = struct {
     active: bool = false,
+    cell: Cell = Cell.space,
 };
 
-const Stage = struct {
+pub const Overlay = struct {
     allocator: std.mem.Allocator,
-    cells: []StageCell,
+    cells: []OverlayCell,
     width: usize,
     height: usize,
 
-    fn init(allocator: std.mem.Allocator, width: usize, height: usize) !Stage {
-        const cells = try allocator.alloc(StageCell, width * height);
-        @memset(cells, StageCell{});
-        return .{ .allocator = allocator, .cells = cells, .width = width, .height = height };
+    pub fn init(allocator: std.mem.Allocator, width: usize, height: usize) !Overlay {
+        const w = @max(width, 1);
+        const h = @max(height, 1);
+        const cells = try allocator.alloc(OverlayCell, w * h);
+        @memset(cells, OverlayCell{});
+        return .{ .allocator = allocator, .cells = cells, .width = w, .height = h };
     }
 
-    fn deinit(self: *Stage) void {
+    pub fn deinit(self: *Overlay) void {
         self.allocator.free(self.cells);
         self.* = undefined;
     }
 
-    fn resize(self: *Stage, width: usize, height: usize) !void {
-        if (width == self.width and height == self.height) return;
-
-        var next = try self.allocator.alloc(StageCell, width * height);
-        @memset(next, StageCell{});
-
-        const copy_w = @min(self.width, width);
-        const copy_h = @min(self.height, height);
-        var y: usize = 0;
-        while (y < copy_h) : (y += 1) {
-            @memcpy(next[y * width .. y * width + copy_w], self.cells[y * self.width .. y * self.width + copy_w]);
-        }
-
+    pub fn resize(self: *Overlay, width: usize, height: usize) !void {
+        const w = @max(width, 1);
+        const h = @max(height, 1);
+        if (w == self.width and h == self.height) return;
         self.allocator.free(self.cells);
-        self.cells = next;
-        self.width = width;
-        self.height = height;
+        self.cells = try self.allocator.alloc(OverlayCell, w * h);
+        @memset(self.cells, OverlayCell{});
+        self.width = w;
+        self.height = h;
     }
 
-    fn clear(self: *Stage) void {
-        @memset(self.cells, StageCell{});
+    pub fn clear(self: *Overlay) void {
+        @memset(self.cells, OverlayCell{});
     }
 
-    fn set(self: *Stage, x: usize, y: usize, glyph: []const u8) void {
+    pub fn set(self: *Overlay, x: usize, y: usize, glyph: []const u8) void {
         if (x >= self.width or y >= self.height) return;
-        var cell = StageCell{};
-        cell.cell.set(glyph);
-        cell.active = true;
-        self.cells[y * self.width + x] = cell;
+        var c = OverlayCell{ .active = true };
+        c.cell.set(glyph);
+        self.cells[y * self.width + x] = c;
     }
 
-    fn get(self: *const Stage, x: usize, y: usize) []const u8 {
-        if (x >= self.width or y >= self.height) return Cell.space.slice();
-        const cell = &self.cells[y * self.width + x];
-        return if (cell.active) cell.cell.slice() else Cell.space.slice();
+    pub fn setCell(self: *Overlay, x: usize, y: usize, cell: Cell) void {
+        if (x >= self.width or y >= self.height) return;
+        self.cells[y * self.width + x] = .{ .active = true, .cell = cell };
     }
 
-    fn commit(self: *const Stage, world: *World, origin_x: usize, origin_y: usize) void {
-        var y: usize = 0;
-        while (y < self.height) : (y += 1) {
-            var x: usize = 0;
-            while (x < self.width) : (x += 1) {
-                const cell = &self.cells[y * self.width + x];
-                if (cell.active) world.set(origin_x + x, origin_y + y, cell.cell.slice());
-            }
-        }
+    pub fn text(self: *Overlay, x: usize, y: usize, text_value: []const u8) void {
+        var col: usize = 0;
+        while (col < text_value.len and x + col < self.width) : (col += 1) self.set(x + col, y, text_value[col .. col + 1]);
+    }
+
+    pub fn get(self: *const Overlay, x: usize, y: usize) ?Cell {
+        if (x >= self.width or y >= self.height) return null;
+        const c = self.cells[y * self.width + x];
+        return if (c.active) c.cell else null;
     }
 };
 
 pub const Canvas = struct {
     allocator: std.mem.Allocator,
-    world: World,
-    viewport: Viewport,
-    stage: Stage,
+    cells: []Cell,
+    width: usize,
+    height: usize,
+    viewport_x: usize = 0,
+    viewport_y: usize = 0,
+    viewport_width: usize,
+    viewport_height: usize,
+    particles: std.ArrayList(Particle) = .empty,
 
     pub fn init(allocator: std.mem.Allocator, width: usize, height: usize) !Canvas {
-        return .{
-            .allocator = allocator,
-            .world = try World.init(allocator, width, height),
-            .viewport = .{ .width = width, .height = height },
-            .stage = try Stage.init(allocator, width, height),
-        };
+        const w = @max(width, 1);
+        const h = @max(height, 1);
+        const cells = try allocator.alloc(Cell, w * h);
+        @memset(cells, Cell.space);
+        return .{ .allocator = allocator, .cells = cells, .width = w, .height = h, .viewport_width = w, .viewport_height = h };
     }
 
     pub fn deinit(self: *Canvas) void {
-        self.world.deinit();
-        self.stage.deinit();
+        self.allocator.free(self.cells);
+        self.particles.deinit(self.allocator);
         self.* = undefined;
     }
 
     pub fn resize(self: *Canvas, width: usize, height: usize) !void {
-        self.viewport.width = @max(width, 1);
-        self.viewport.height = @max(height, 1);
-        try self.world.growTo(self.viewport.x + self.viewport.width, self.viewport.y + self.viewport.height);
-        self.viewport.clampToWorld(self.world.width, self.world.height);
-        try self.stage.resize(self.viewport.width, self.viewport.height);
+        self.viewport_width = @max(width, 1);
+        self.viewport_height = @max(height, 1);
+        try self.growTo(self.viewport_x + self.viewport_width, self.viewport_y + self.viewport_height);
+        self.clampViewport();
+    }
+
+    fn growTo(self: *Canvas, width: usize, height: usize) !void {
+        if (width <= self.width and height <= self.height) return;
+        const next_w = @max(width, self.width);
+        const next_h = @max(height, self.height);
+        const next = try self.allocator.alloc(Cell, next_w * next_h);
+        @memset(next, Cell.space);
+        var y: usize = 0;
+        while (y < self.height) : (y += 1) @memcpy(next[y * next_w .. y * next_w + self.width], self.cells[y * self.width .. y * self.width + self.width]);
+        self.allocator.free(self.cells);
+        self.cells = next;
+        self.width = next_w;
+        self.height = next_h;
+    }
+
+    fn clampViewport(self: *Canvas) void {
+        self.viewport_x = @min(self.viewport_x, if (self.width <= self.viewport_width) 0 else self.width - self.viewport_width);
+        self.viewport_y = @min(self.viewport_y, if (self.height <= self.viewport_height) 0 else self.height - self.viewport_height);
     }
 
     pub fn clear(self: *Canvas) void {
-        self.world.clear();
-        self.stage.clear();
+        @memset(self.cells, Cell.space);
+        self.particles.clearRetainingCapacity();
     }
 
     pub fn set(self: *Canvas, x: usize, y: usize, glyph: []const u8) void {
-        self.world.set(x, y, glyph);
+        if (x >= self.width or y >= self.height) return;
+        self.cells[y * self.width + x].set(glyph);
     }
 
     pub fn setCell(self: *Canvas, x: usize, y: usize, cell: Cell) void {
-        if (x >= self.world.width or y >= self.world.height) return;
-        self.world.cells[y * self.world.width + x] = cell;
+        if (x >= self.width or y >= self.height) return;
+        self.cells[y * self.width + x] = cell;
     }
 
     pub fn get(self: *const Canvas, x: usize, y: usize) []const u8 {
-        return self.world.get(x, y);
+        if (x >= self.width or y >= self.height) return Cell.space.slice();
+        return self.cells[y * self.width + x].slice();
     }
 
     pub fn getCell(self: *const Canvas, x: usize, y: usize) Cell {
-        if (x >= self.world.width or y >= self.world.height) return Cell.space;
-        return self.world.cells[y * self.world.width + x];
+        if (x >= self.width or y >= self.height) return Cell.space;
+        return self.cells[y * self.width + x];
     }
 
-    pub fn setStage(self: *Canvas, x: usize, y: usize, glyph: []const u8) void {
-        self.stage.set(x, y, glyph);
-    }
-
-    pub fn setStageCell(self: *Canvas, x: usize, y: usize, cell: Cell) void {
-        self.stage.set(x, y, cell.slice());
-    }
-
-    pub fn getStage(self: *const Canvas, x: usize, y: usize) []const u8 {
-        return self.stage.get(x, y);
-    }
-
-    pub fn clearStage(self: *Canvas) void {
-        self.stage.clear();
-    }
-
-    pub fn commitStage(self: *Canvas) void {
-        self.stage.commit(&self.world, self.viewport.x, self.viewport.y);
-        self.stage.clear();
-    }
-
-    pub fn addParticle(self: *Canvas, p: Particle) !void {
-        try self.world.addParticle(self.allocator, p);
-    }
-
-    pub fn removeParticle(self: *Canvas, index: usize) bool {
-        return self.world.removeParticle(index);
-    }
-
-    pub fn particleCount(self: *const Canvas) usize {
-        return self.world.particles.items.len;
-    }
-
-    pub fn particles(self: *const Canvas) []const Particle {
-        return self.world.particles.items;
-    }
-
-    pub fn viewportX(self: *const Canvas) usize {
-        return self.viewport.x;
-    }
-
-    pub fn viewportY(self: *const Canvas) usize {
-        return self.viewport.y;
+    pub fn cellAtViewport(self: *const Canvas, x: usize, y: usize) Cell {
+        return self.getCell(self.viewport_x + x, self.viewport_y + y);
     }
 
     pub fn viewportToWorldX(self: *const Canvas, x: usize) usize {
-        return @min(self.viewport.x + x, self.world.width -| 1);
+        return @min(self.viewport_x + x, self.width -| 1);
     }
 
     pub fn viewportToWorldY(self: *const Canvas, y: usize) usize {
-        return @min(self.viewport.y + y, self.world.height -| 1);
+        return @min(self.viewport_y + y, self.height -| 1);
     }
 
-    pub fn cellAtViewport(self: *const Canvas, x: usize, y: usize) []const u8 {
-        if (x >= self.viewport.width or y >= self.viewport.height) return Cell.space.slice();
-        const sx = self.viewport.x + x;
-        const sy = self.viewport.y + y;
-        if (sx >= self.world.width or sy >= self.world.height) return Cell.space.slice();
-
-        const stage_x = x;
-        const stage_y = y;
-        if (stage_x < self.stage.width and stage_y < self.stage.height) {
-            const cell = &self.stage.cells[stage_y * self.stage.width + stage_x];
-            if (cell.active) return cell.cell.slice();
-        }
-
-        return self.world.get(sx, sy);
+    pub fn addParticle(self: *Canvas, p: Particle) !void {
+        try self.particles.append(self.allocator, p);
     }
 
-    pub fn render(self: *const Canvas, writer: *std.Io.Writer) !void {
-        try writer.writeAll("\x1b[H");
-
-        var y: usize = 0;
-        while (y < self.viewport.height) : (y += 1) {
-            try writer.print("\x1b[{d};1H", .{y + 1});
-            var x: usize = 0;
-            while (x < self.viewport.width) : (x += 1) {
-                try writer.writeAll(self.cellAtViewport(x, y));
-            }
-        }
-
-        try writer.writeAll("\x1b[0m");
-        try self.renderParticles(writer);
+    pub fn removeParticle(self: *Canvas, index: usize) bool {
+        if (index >= self.particles.items.len) return false;
+        _ = self.particles.swapRemove(index);
+        return true;
     }
 
-    pub fn renderSelection(self: *const Canvas, writer: *std.Io.Writer, selection: ?Selection) !void {
-        const sel = selection orelse return;
-        const left = @max(@min(sel.x0, sel.x1), self.viewport.x);
-        const top = @max(@min(sel.y0, sel.y1), self.viewport.y);
-        const right = @min(@max(sel.x0, sel.x1), self.viewport.x + self.viewport.width -| 1);
-        const bottom = @min(@max(sel.y0, sel.y1), self.viewport.y + self.viewport.height -| 1);
-        if (left > right or top > bottom) return;
-
-        try writer.writeAll("\x1b[7m");
-        var y = top;
-        while (y <= bottom) : (y += 1) {
-            try writer.print("\x1b[{d};{d}H", .{ y + 1 - self.viewport.y, left + 1 - self.viewport.x });
-            var x = left;
-            while (x <= right) : (x += 1) {
-                try writer.writeAll(self.cellAtViewport(x - self.viewport.x, y - self.viewport.y));
-            }
-        }
-        try writer.writeAll("\x1b[0m");
-    }
-
-    fn renderParticles(self: *const Canvas, writer: *std.Io.Writer) !void {
-        for (self.world.particles.items) |p| {
-            const px: isize = @intFromFloat(@round(p.x));
-            const py: isize = @intFromFloat(@round(p.y));
-            const sx = px - @as(isize, @intCast(self.viewport.x));
-            const sy = py - @as(isize, @intCast(self.viewport.y));
-            if (sx < 0 or sy < 0) continue;
-            if (sx >= @as(isize, @intCast(self.viewport.width))) continue;
-            if (sy >= @as(isize, @intCast(self.viewport.height))) continue;
-
-            try writer.print("\x1b[{d};{d}H{s}", .{ @as(usize, @intCast(sy + 1)), @as(usize, @intCast(sx + 1)), p.glyph.slice() });
-        }
-
-        try writer.writeAll("\x1b[H");
+    pub fn particleCount(self: *const Canvas) usize {
+        return self.particles.items.len;
     }
 };

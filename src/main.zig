@@ -41,7 +41,6 @@ const App = struct {
     brushes: *BrushSet,
     clipboard: std.ArrayList(u8),
     move_cells: std.ArrayList(Cell),
-    preview_buf: std.ArrayList(u8),
     selection: ?Selection = null,
     moving: ?MoveState = null,
     right_down: bool = false,
@@ -53,18 +52,21 @@ const App = struct {
     escape_countdown: f64 = 0,
     escape_first_time: f64 = 0,
     escape_repeat_count: usize = 0,
+    escape_last_time: f64 = 0,
+    escape_latched: bool = false,
+    suppress_left_until_release: bool = false,
+    suppress_right_until_release: bool = false,
     last_mouse: Point = .{ .x = 0, .y = 0 },
     last_brush_scroll_time: f64 = -brush_scroll_cooldown_s,
     last_size_sync: f64 = -1,
 
     fn render(self: *App, now: f64) !void {
         try self.syncTerminalSize(now);
-        const preview = try self.previewText();
         const countdown = if (self.escape_countdown > 0)
             @as(usize, @intFromFloat(@ceil(self.escape_countdown / escape_clear_step_s)))
         else
             null;
-        try self.renderer.render(&self.terminal.writer.interface, &self.canvas, self.selection, self.moveOverlay(), .{ .countdown = countdown, .preview = preview });
+        try self.renderer.render(&self.terminal.writer.interface, &self.canvas, &self.bridge.overlay, &self.bridge.preview, self.selection, self.moveOverlay(), countdown);
         try self.terminal.writer.interface.flush();
     }
 
@@ -76,7 +78,15 @@ const App = struct {
         self.right_current = null;
         self.left_down = false;
         self.left_moved = false;
-        self.canvas.clearStage();
+        self.bridge.overlay.clear();
+    }
+
+    fn cancelTransientInputFromEscape(self: *App) void {
+        const suppress_left = self.left_down or self.moving != null;
+        const suppress_right = self.right_down;
+        self.cancelTransientInput();
+        self.suppress_left_until_release = self.suppress_left_until_release or suppress_left;
+        self.suppress_right_until_release = self.suppress_right_until_release or suppress_right;
     }
 
     fn startEscapeCountdown(self: *App) void {
@@ -86,8 +96,9 @@ const App = struct {
     }
 
     fn handleEscapePress(self: *App, now: f64) void {
-        self.cancelTransientInput();
-        if (self.escape_countdown > 0) return;
+        self.escape_last_time = now;
+        self.cancelTransientInputFromEscape();
+        if (self.escape_latched or self.escape_countdown > 0) return;
         if (self.escape_first_time == 0 or now - self.escape_first_time > escape_repeat_window_s) {
             self.escape_first_time = now;
             self.escape_repeat_count = 1;
@@ -102,13 +113,17 @@ const App = struct {
         self.escape_countdown = 0;
         self.escape_first_time = 0;
         self.escape_repeat_count = 0;
+        self.escape_latched = false;
     }
 
-    fn updateEscapeClear(self: *App, dt: f64) void {
+    fn updateEscapeClear(self: *App, dt: f64, now: f64) void {
+        if (self.escape_latched and now - self.escape_last_time > escape_repeat_window_s) self.escape_latched = false;
         if (self.escape_countdown <= 0) return;
         self.escape_countdown -= dt;
         if (self.escape_countdown <= 0) {
             self.escape_countdown = 0;
+            self.escape_latched = true;
+            self.escape_last_time = now;
             self.canvas.clear();
         }
     }
@@ -117,22 +132,15 @@ const App = struct {
         if (now - self.last_size_sync < 0.1) return;
         self.last_size_sync = now;
         const size = try self.terminal.size();
-        if (size.cols == self.canvas.viewport.width and size.rows == self.canvas.viewport.height) return;
+        if (size.cols == self.canvas.viewport_width and size.rows == self.canvas.viewport_height) return;
         self.cancelMove();
         try self.canvas.resize(size.cols, size.rows);
+        try self.bridge.resize(size.cols, size.rows);
         try self.renderer.resize(size.cols, size.rows);
         self.selection = null;
         self.right_down = false;
         self.right_anchor = null;
         self.right_current = null;
-    }
-
-    fn previewText(self: *App) !?[]const u8 {
-        const box_w: usize = 24;
-        const box_h: usize = 5;
-        if (self.canvas.viewport.width < box_w + 2 or self.canvas.viewport.height < box_h + 2) return null;
-        if (!try self.bridge.preview(box_w, box_h, &self.preview_buf)) return null;
-        return self.preview_buf.items;
     }
 
     fn moveOverlay(self: *const App) ?renderer_mod.MoveOverlay {
@@ -145,8 +153,6 @@ const App = struct {
             .source = moving.selection,
             .left = @as(isize, @intCast(left)) + dx,
             .top = @as(isize, @intCast(top)) + dy,
-            .width = selectionWidth(moving.selection),
-            .height = selectionHeight(moving.selection),
             .cells = self.move_cells.items,
         };
     }
@@ -226,7 +232,7 @@ const App = struct {
             }
         }
 
-        self.canvas.clearStage();
+        self.bridge.overlay.clear();
         self.move_cells.clearRetainingCapacity();
         self.moving = null;
         self.selection = null;
@@ -234,16 +240,9 @@ const App = struct {
 
     fn cancelMove(self: *App) void {
         if (self.moving == null) return;
-        self.canvas.clearStage();
+        self.bridge.overlay.clear();
         self.move_cells.clearRetainingCapacity();
         self.moving = null;
-    }
-
-    fn stageWorldCell(self: *App, world_x: usize, world_y: usize, cell: Cell) void {
-        if (world_x < self.canvas.viewport.x or world_y < self.canvas.viewport.y) return;
-        const vx = world_x - self.canvas.viewport.x;
-        const vy = world_y - self.canvas.viewport.y;
-        if (vx < self.canvas.viewport.width and vy < self.canvas.viewport.height) self.canvas.setStageCell(vx, vy, cell);
     }
 
     fn handleEvent(self: *App, event: terminal_mod.Event, dt: f64, time: f64) !void {
@@ -269,6 +268,17 @@ const App = struct {
             .mouse => |mouse| {
                 self.last_mouse = .{ .x = mouse.x, .y = mouse.y };
                 const world_mouse = Point{ .x = self.canvas.viewportToWorldX(mouse.x), .y = self.canvas.viewportToWorldY(mouse.y) };
+
+                if (mouse.button == .left and self.suppress_left_until_release) {
+                    if (mouse.action == .release) self.suppress_left_until_release = false;
+                    if (mouse.action != .press) return;
+                    self.suppress_left_until_release = false;
+                }
+                if (mouse.button == .right and self.suppress_right_until_release) {
+                    if (mouse.action == .release) self.suppress_right_until_release = false;
+                    if (mouse.action != .press) return;
+                    self.suppress_right_until_release = false;
+                }
 
                 try switch (mouse.button) {
                     .left => {
@@ -411,7 +421,7 @@ pub fn main(init: std.process.Init) !void {
     defer lua.deinit();
     lua.openLibs();
 
-    const bridge = LuaBridge.init(arena, init.gpa, init.io, lua, &canvas, rng);
+    const bridge = try LuaBridge.init(arena, init.gpa, init.io, lua, &canvas, rng, size.cols, size.rows);
 
     var app = App{
         .allocator = arena,
@@ -422,12 +432,12 @@ pub fn main(init: std.process.Init) !void {
         .brushes = &brushes,
         .clipboard = .empty,
         .move_cells = .empty,
-        .preview_buf = .empty,
     };
     app.bridge.canvas = &app.canvas;
     app.bridge.register();
     try app.bridge.loadBrush(brushes.activePath());
     defer app.terminal.deinit() catch {};
+    defer app.bridge.deinit();
     defer app.renderer.deinit();
     defer app.canvas.deinit();
 
@@ -444,7 +454,7 @@ pub fn main(init: std.process.Init) !void {
             const now = terminal_mod.nowSeconds();
             const dt = @min(now - last_time, 0.05);
             last_time = now;
-            app.updateEscapeClear(dt);
+            app.updateEscapeClear(dt, now);
             app.handleEvent(event, dt, now) catch |err| switch (err) {
                 error.Quit => return,
                 else => return err,
@@ -457,7 +467,7 @@ pub fn main(init: std.process.Init) !void {
         last_time = now;
 
         const had_countdown = app.escape_countdown > 0;
-        app.updateEscapeClear(dt);
+        app.updateEscapeClear(dt, now);
         if (had_countdown) {
             try app.render(now);
         } else if (app.bridge.wantsFrames()) {

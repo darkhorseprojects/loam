@@ -128,3 +128,9 @@ the terminal backend is POSIX-oriented:
 - BSD targets with `TIOCGWINSZ`
 
 Windows is not supported yet because raw terminal IO, mouse reporting, alternate screen, and clipboard behavior need a separate console backend.
+
+## renderer / Lua boundary update
+
+rendering never calls Lua. `lua_bridge.zig` rebuilds the preview cache after brush load or brush events. `renderer.zig` consumes cached cells only.
+
+`canvas.zig` now owns durable cells and particles only. brush drag previews use a renderer-owned overlay; moving selections use a separate move overlay. neither is written into the durable canvas until an explicit commit/release.

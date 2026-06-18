@@ -231,3 +231,7 @@ return brush
 - `eraser`: `1` larger, `2` smaller
 - `seed`, `soil`, `moss`, `floral`: size and glyph palette controls
 - `particles`: animated particle burst
+
+## preview cache
+
+`brush.preview(ctx, width, height)` is called by the brush host after brush load or brush events, not by the renderer. rendering never calls Lua. returned preview text is copied into a Zig-owned preview cache.
