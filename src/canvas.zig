@@ -314,7 +314,7 @@ pub const Canvas = struct {
     }
 
     pub fn render(self: *const Canvas, writer: *std.Io.Writer) !void {
-        try writer.writeAll("\x1b[?25l\x1b[H\x1b[2J");
+        try writer.writeAll("\x1b[H");
 
         var y: usize = 0;
         while (y < self.viewport.height) : (y += 1) {

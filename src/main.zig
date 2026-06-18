@@ -27,6 +27,7 @@ const MoveState = struct {
 const brush_scroll_cooldown_s = 0.35;
 const escape_clear_countdown_s = 1.5;
 const escape_clear_step_s = 0.5;
+const escape_repeat_window_s = 0.75;
 
 const App = struct {
     allocator: std.mem.Allocator,
@@ -46,11 +47,14 @@ const App = struct {
     left_anchor: Point = .{ .x = 0, .y = 0 },
     left_moved: bool = false,
     escape_countdown: f64 = 0,
+    escape_first_time: f64 = 0,
+    escape_repeat_count: usize = 0,
     last_mouse: Point = .{ .x = 0, .y = 0 },
     last_brush_scroll_time: f64 = -brush_scroll_cooldown_s,
+    last_size_sync: f64 = -1,
 
-    fn render(self: *App) !void {
-        try self.syncTerminalSize();
+    fn render(self: *App, now: f64) !void {
+        try self.syncTerminalSize(now);
         try self.canvas.render(&self.terminal.writer.interface);
         try self.drawCountdown();
         try self.drawPreview();
@@ -58,7 +62,7 @@ const App = struct {
         try self.terminal.writer.interface.flush();
     }
 
-    fn startEscapeClear(self: *App) void {
+    fn cancelTransientInput(self: *App) void {
         self.cancelMove();
         self.selection = null;
         self.right_down = false;
@@ -67,11 +71,31 @@ const App = struct {
         self.left_down = false;
         self.left_moved = false;
         self.canvas.clearStage();
+    }
+
+    fn startEscapeCountdown(self: *App) void {
         self.escape_countdown = escape_clear_countdown_s;
+        self.escape_first_time = 0;
+        self.escape_repeat_count = 0;
+    }
+
+    fn handleEscapePress(self: *App, now: f64) void {
+        self.cancelTransientInput();
+        if (self.escape_countdown > 0) return;
+        if (self.escape_first_time == 0 or now - self.escape_first_time > escape_repeat_window_s) {
+            self.escape_first_time = now;
+            self.escape_repeat_count = 1;
+            return;
+        }
+
+        self.escape_repeat_count += 1;
+        if (self.escape_repeat_count >= 2) self.startEscapeCountdown();
     }
 
     fn cancelEscapeClear(self: *App) void {
         self.escape_countdown = 0;
+        self.escape_first_time = 0;
+        self.escape_repeat_count = 0;
     }
 
     fn updateEscapeClear(self: *App, dt: f64) void {
@@ -83,7 +107,9 @@ const App = struct {
         }
     }
 
-    fn syncTerminalSize(self: *App) !void {
+    fn syncTerminalSize(self: *App, now: f64) !void {
+        if (now - self.last_size_sync < 0.1) return;
+        self.last_size_sync = now;
         const size = try self.terminal.size();
         if (size.cols == self.canvas.viewport.width and size.rows == self.canvas.viewport.height) return;
         self.cancelMove();
@@ -238,7 +264,7 @@ const App = struct {
         switch (event) {
             .key => |key| switch (key) {
                 .q => return error.Quit,
-                .escape => self.startEscapeClear(),
+                .escape => self.handleEscapePress(time),
                 .c => {
                     self.cancelMove();
                     self.selection = null;
@@ -422,7 +448,7 @@ pub fn main(init: std.process.Init) !void {
 
     var last_time = terminal_mod.nowSeconds();
 
-    try app.render();
+    try app.render(last_time);
 
     while (true) {
         while (try app.terminal.readEvent(&reader.interface)) |event| {
@@ -433,7 +459,7 @@ pub fn main(init: std.process.Init) !void {
                 error.Quit => return,
                 else => return err,
             };
-            try app.render();
+            try app.render(now);
         }
 
         const now = terminal_mod.nowSeconds();
@@ -443,10 +469,10 @@ pub fn main(init: std.process.Init) !void {
         const had_countdown = app.escape_countdown > 0;
         app.updateEscapeClear(dt);
         if (had_countdown) {
-            try app.render();
+            try app.render(now);
         } else if (app.bridge.wantsFrames()) {
             try app.bridge.paint(.frame, dt, now);
-            try app.render();
+            try app.render(now);
         }
         terminal_mod.sleepNanos(16 * std.time.ns_per_ms);
     }
