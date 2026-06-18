@@ -26,11 +26,6 @@ jobs:
             target: aarch64-linux
             asset_os: linux
             asset_arch: aarch64
-          - label: macos-x86_64
-            os: macos-13
-            target: x86_64-macos
-            asset_os: macos
-            asset_arch: x86_64
           - label: macos-aarch64
             os: macos-14
             target: aarch64-macos

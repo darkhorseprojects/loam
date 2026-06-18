@@ -12,7 +12,15 @@ trap cleanup EXIT INT TERM
 
 case "$(uname -s)" in
   Linux) os="linux" ;;
-  Darwin) os="macos" ;;
+  Darwin)
+    os="macos"
+    case "$(uname -m)" in
+      x86_64|amd64)
+        echo "macOS x86_64 release assets are not built yet; build from source for now" >&2
+        exit 1
+        ;;
+    esac
+    ;;
   FreeBSD|OpenBSD|NetBSD|DragonFly) os="bsd" ;;
   *)
     echo "unsupported OS: $(uname -s)" >&2
