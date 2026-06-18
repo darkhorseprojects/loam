@@ -367,10 +367,7 @@ docs/
   brush-api.md
   system.md
 wiki/
-  home.md
-  brush-api.md
-  system.md
-  installation.md
+  https://github.com/darkhorseprojects/loam.wiki
 scripts/
   install.sh
   bump-version.sh
@@ -390,6 +387,6 @@ to update the project version, run:
 scripts/bump-version.sh 0.2.0
 ```
 
-the script updates `src/version.zig`, `build.zig.zon`, README/docs/wiki references, and release script defaults.
+the script updates `src/version.zig`, `build.zig.zon`, README/docs references, and release script defaults. update the GitHub wiki at `https://github.com/darkhorseprojects/loam.wiki` separately.
 
 release tags should use `v0.1.0`, `v0.2.0`, etc.
