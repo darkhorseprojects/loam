@@ -45,8 +45,10 @@ jobs:
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           asset="loam-${version}-${{ matrix.asset_os }}-${{ matrix.asset_arch }}.tar.gz"
-          mkdir -p dist
-          tar -czf "dist/${asset}" -C zig-out/bin loam -C . brushes
+          mkdir -p "dist/loam"
+          cp zig-out/bin/loam "dist/loam/loam"
+          cp -R brushes "dist/loam/brushes"
+          tar -czf "dist/${asset}" -C dist/loam .
           echo "asset=${asset}" >> "$GITHUB_OUTPUT"
         id: package
       - uses: actions/upload-artifact@v4
