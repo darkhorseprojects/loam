@@ -1,7 +1,25 @@
 #!/usr/bin/env sh
 set -eu
 
-VERSION="${LOAM_VERSION:-0.1.1}"
+if [ -n "${LOAM_VERSION:-}" ]; then
+  VERSION="$LOAM_VERSION"
+else
+  if command -v curl >/dev/null 2>&1; then
+    VERSION=$(curl -fsSL https://api.github.com/repos/darkhorseprojects/loam/releases/latest | sed -n 's/.*"tag_name": "v\([^"]*\)".*/\1/p')
+  elif command -v wget >/dev/null 2>&1; then
+    VERSION=$(wget -qO- https://api.github.com/repos/darkhorseprojects/loam/releases/latest | sed -n 's/.*"tag_name": "v\([^"]*\)".*/\1/p')
+  else
+    echo "curl or wget is required" >&2
+    exit 1
+  fi
+fi
+
+if [ -z "$VERSION" ]; then
+  echo "could not determine latest loam version; set LOAM_VERSION=v1.2.3" >&2
+  exit 1
+fi
+VERSION=${VERSION#v}
+
 INSTALL_DIR="${LOAM_INSTALL_DIR:-$HOME/.local/bin}"
 TMP_DIR="${TMPDIR:-/tmp}/loam-install.$$"
 

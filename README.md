@@ -35,13 +35,13 @@ current version: **0.1.1**
 from a release:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/darkhorseprojects/loam/v0.1.1/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/darkhorseprojects/loam/main/scripts/install.sh | sh
 ```
 
 optional install location:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/darkhorseprojects/loam/v0.1.1/scripts/install.sh | LOAM_INSTALL_DIR="$HOME/.local/bin" sh
+curl -fsSL https://raw.githubusercontent.com/darkhorseprojects/loam/main/scripts/install.sh | LOAM_INSTALL_DIR="$HOME/.local/bin" sh
 ```
 
 from source:
@@ -370,7 +370,6 @@ wiki/
   https://github.com/darkhorseprojects/loam.wiki
 scripts/
   install.sh
-  bump-version.sh
 ```
 
 ## versioning
@@ -381,12 +380,6 @@ the single source of truth is:
 src/version.zig
 ```
 
-to update the project version, run:
+`build.zig` reads that Zig constant and stamps both `loam` and `loam-mcp`. `build.zig.zon` is kept as a valid package version, but release tags and install assets are driven by the tag, not by a separate bump script.
 
-```sh
-scripts/bump-version.sh 0.2.0
-```
-
-the script updates `src/version.zig`, `build.zig.zon`, README/docs references, and release script defaults. update the GitHub wiki at `https://github.com/darkhorseprojects/loam.wiki` separately.
-
-release tags should use `v0.1.1`, `v0.2.0`, etc.
+release tags should use `v0.1.1`, `v0.2.0`, etc. update the GitHub wiki at `https://github.com/darkhorseprojects/loam.wiki` separately.
