@@ -30,6 +30,13 @@ pub const Cell = struct {
     }
 };
 
+fn utf8CellLen(bytes: []const u8) usize {
+    if (bytes.len == 0) return 0;
+    const first = bytes[0];
+    const wanted: usize = if (first < 0x80) 1 else if (first & 0xe0 == 0xc0) 2 else if (first & 0xf0 == 0xe0) 3 else if (first & 0xf8 == 0xf0) 4 else 1;
+    return @min(wanted, bytes.len);
+}
+
 pub const Selection = struct {
     x0: usize,
     y0: usize,
@@ -128,8 +135,13 @@ pub const Overlay = struct {
     }
 
     pub fn text(self: *Overlay, x: usize, y: usize, text_value: []const u8) void {
+        var i: usize = 0;
         var col: usize = 0;
-        while (col < text_value.len and x + col < self.width) : (col += 1) self.set(x + col, y, text_value[col .. col + 1]);
+        while (i < text_value.len and x + col < self.width) : (col += 1) {
+            const n = utf8CellLen(text_value[i..]);
+            self.set(x + col, y, text_value[i .. i + n]);
+            i += n;
+        }
     }
 
     pub fn get(self: *const Overlay, x: usize, y: usize) ?Cell {
@@ -241,3 +253,13 @@ pub const Canvas = struct {
         return self.particles.items.len;
     }
 };
+
+test "overlay text keeps utf8 glyph bytes per cell" {
+    var overlay = try Overlay.init(std.testing.allocator, 4, 1);
+    defer overlay.deinit();
+
+    overlay.text(0, 0, "┌─a");
+    try std.testing.expectEqualStrings("┌", overlay.get(0, 0).?.slice());
+    try std.testing.expectEqualStrings("─", overlay.get(1, 0).?.slice());
+    try std.testing.expectEqualStrings("a", overlay.get(2, 0).?.slice());
+}

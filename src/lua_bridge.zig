@@ -149,7 +149,7 @@ pub const LuaBridge = struct {
         var y: usize = 0;
         while (y < self.preview.height) : (y += 1) {
             const row = rows.next() orelse "";
-            self.preview.text(0, y, row[0..@min(row.len, self.preview.width)]);
+            self.preview.text(0, y, row);
         }
         self.lua.pop(2);
     }
