@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x86_64
+            os: ubuntu-latest
+            target: x86_64-linux
+          - label: linux-aarch64
+            os: ubuntu-latest
+            target: aarch64-linux
+          - label: macos-x86_64
+            os: macos-13
+            target: x86_64-macos
+          - label: macos-aarch64
+            os: macos-14
+            target: aarch64-macos
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: goto-bus-stop/setup-zig@v2
+        with:
+          zig-version: 0.16.0
+      - name: build
+        run: zig build
+      - name: test
+        run: zig build test
+      - name: help
+        run: ./zig-out/bin/loam --help
+      - name: list
+        run: ./zig-out/bin/loam --list
