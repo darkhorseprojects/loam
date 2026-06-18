@@ -170,7 +170,7 @@ pub const Terminal = struct {
             if (parseSgrMouse(payload)) |mouse| return .{ .mouse = mouse };
         }
 
-        return .{ .key = .{ .other = 0x1b } };
+        return .{ .key = .escape };
     }
 };
 
