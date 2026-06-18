@@ -22,10 +22,14 @@ if [ -z "$old" ]; then
   exit 66
 fi
 
-perl -0pi -e "s/pub const version = \"\Q$old\E\";/pub const version = \"\Q$new\E\";/" src/version.zig
-perl -0pi -e "s/\.version = \"\Q$old\E\"/\.version = \"\Q$new\E\"/" build.zig.zon
-rg -l "\b\Q$old\E\b" README.md docs wiki scripts .github 2>/dev/null | while IFS= read -r file; do
-  perl -0pi -e "s/\b\Q$old\E\b/\Q$new\E/g" "$file"
+export OLD_VERSION="$old"
+export NEW_VERSION="$new"
+perl -0pi -e 's/pub const version = "\Q$ENV{OLD_VERSION}\E";/pub const version = "\Q$ENV{NEW_VERSION}\E";/' src/version.zig
+perl -0pi -e 's/\.version = "\Q$ENV{OLD_VERSION}\E"/\.version = "\Q$ENV{NEW_VERSION}\E"/' build.zig.zon
+
+files=$(rg -l "\b\Q$old\E\b" README.md docs wiki scripts .github 2>/dev/null || true)
+for file in $files; do
+  perl -0pi -e 's/\b\Q$ENV{OLD_VERSION}\E\b/\Q$ENV{NEW_VERSION}\E/g' "$file"
 done
 
 printf 'loam version %s -> %s\n' "$old" "$new"
