@@ -499,6 +499,7 @@ fn ctxSetParticle(lua: *Lua) i32 {
     p.vy = @floatCast(argFloat(lua, 5, p.vy));
     p.glyph = Cell.init(argGlyph(lua, 6));
     p.ttl = @floatCast(argFloat(lua, 7, p.ttl));
+    p.age = @floatCast(argFloat(lua, 8, p.age));
     b.canvas.particles.items[i] = p;
     lua.pushBoolean(true);
     return 1;

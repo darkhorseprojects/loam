@@ -57,7 +57,7 @@ function brush.paint(ctx, event)
       if age >= ttl then
         ctx.removeParticle(i)
       else
-        ctx.setParticle(i, x, y, vx, vy, glyph, ttl)
+        ctx.setParticle(i, x, y, vx, vy, glyph, ttl, age)
       end
     end)
   end

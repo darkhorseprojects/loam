@@ -155,7 +155,8 @@ when that brush writes a cell, it is making a permanent canvas edit. the engine 
 
 that is how the default natural brushes work:
 
-- `soil` and `seed` place substrate directly.
+- `soil` places substrate directly.
+- `seed` plants animated sprout particles that settle into sprouts.
 - `moss` and `floral` look for nearby existing cells before growing.
 - `eraser` writes spaces.
 - `box` and `line` use staged previews while dragging, then commit on release.
@@ -258,7 +259,9 @@ the active brush decides what `1`, `2`, `3`, etc. mean. in the shipped brushes:
 - `box`: style, corner, fill, edge pattern
 - `line`: line style with horizontal, vertical, diagonal, and reverse-diagonal glyph variants
 - `eraser`: radius up/down
-- `seed`, `soil`, `moss`, `floral`: size and glyph palette
+- `seed`: animated sprout placement
+- `soil`: size and glyph palette
+- `moss`, `floral`: size and glyph palette, attached growth
 
 digits also work during an active staged drag, so a brush can redraw its preview immediately.
 
@@ -294,7 +297,7 @@ the engine will store and render them. your terminal/font decides whether a glyp
 | `ctx.emit(x, y, glyph, ttl, vx, vy)` | create a particle |
 | `ctx.particleCount()` | number of live particles |
 | `ctx.getParticle(i)` | read particle fields |
-| `ctx.setParticle(i, x, y, vx, vy, glyph, ttl)` | update one particle |
+| `ctx.setParticle(i, x, y, vx, vy, glyph, ttl, age)` | update one particle |
 | `ctx.removeParticle(i)` | remove one particle |
 | `ctx.eachParticle(fn)` | call `fn(index)` for each particle |
 | `ctx.time()` / `ctx.dt()` | monotonic time and frame delta |

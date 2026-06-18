@@ -105,7 +105,7 @@ local ok, x, y, vx, vy, glyph, ttl, age, seed = ctx.getParticle(i)
 write:
 
 ```lua
-ctx.setParticle(i, x, y, vx, vy, glyph, ttl)
+ctx.setParticle(i, x, y, vx, vy, glyph, ttl, age)
 ```
 
 remove:
@@ -122,7 +122,7 @@ ctx.eachParticle(function(i)
   if not ok then return end
 
   -- update brush state here
-  ctx.setParticle(i, x, y, vx, vy, glyph, ttl)
+  ctx.setParticle(i, x, y, vx, vy, glyph, ttl, age)
 end)
 ```
 
@@ -229,7 +229,9 @@ return brush
 - `box`: `1` style, `2` corner, `3` fill, `4` edge pattern, `0` cancel
 - `line`: `1` style; styles include horizontal, vertical, diagonal, and reverse-diagonal glyph variants
 - `eraser`: `1` larger, `2` smaller
-- `seed`, `soil`, `moss`, `floral`: size and glyph palette controls
+- `seed`: animated sprout placement
+- `soil`: `1` larger, `2` smaller, `3` palette
+- `moss`, `floral`: `1` larger, `2` smaller, `3` palette; growth attaches to nearby cells
 - `particles`: animated particle burst
 
 ## preview cache

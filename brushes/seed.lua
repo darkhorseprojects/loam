@@ -1,77 +1,82 @@
 local brush = {
   name = "seed",
   glyph = ".",
+  animated = true,
 }
 
-local radius = 1
-local palettes = {
-  { name = "plain", glyphs = { ".", ".", "'", "`" } },
-  { name = "sprout", glyphs = { ".", "'", "˱", "˲", "ꜛ" } },
-  { name = "petal", glyphs = { "·", "✦", "✧", "❊" } },
-  { name = "sakura", glyphs = { "🌸", "❀", "✿", "·" } },
-  { name = "leaf", glyphs = { "🍃", "❦", "❧", "⌁" } },
-}
-local palette_i = 1
+local sprout = { ".", "'", "˱", "˲", "ꜛ" }
+local last_x = nil
+local last_y = nil
 
-local function palette()
-  return palettes[palette_i]
+local function cell(v)
+  return math.floor(v) + 1
 end
 
-local function pick(ctx)
-  local glyphs = palette().glyphs
-  return glyphs[math.floor(ctx.randomRange(1, #glyphs + 0.999))]
+local function emit_seed(ctx, x, y)
+  ctx.emit(
+    x,
+    y,
+    sprout[1],
+    ctx.randomRange(0.9, 1.8),
+    ctx.randomRange(-0.05, 0.05),
+    ctx.randomRange(-0.10, 0.02)
+  )
 end
 
-local function paint_text(ctx, x, y, text)
-  local cx = x
-  local cy = y
-  for i = 1, #text do
-    local ch = text:sub(i, i)
-    if ch == "\n" then
-      cx = x
-      cy = cy + 1
-    else
-      ctx.set(cx, cy, ch)
-      cx = cx + 1
-    end
-  end
-end
-
-local function scatter(ctx, x, y)
-  for yy = y - radius, y + radius do
-    for xx = x - radius, x + radius do
-      if math.abs(xx - x) + math.abs(yy - y) <= radius and ctx.random() < 0.34 then
-        ctx.set(xx, yy, pick(ctx))
-      end
-    end
+local function plant(ctx, x, y, strong)
+  local count = strong and 5 or 2
+  for i = 1, count do
+    emit_seed(ctx, x + ctx.randomRange(-0.8, 0.8), y + ctx.randomRange(-0.35, 0.35))
   end
 end
 
 function brush.preview(ctx, width, height)
-  local p = palette()
   return table.concat({
-    " " .. p.glyphs[1] .. " " .. p.glyphs[2] .. " " .. p.glyphs[3],
-    "seed " .. p.name,
-    "1+ 2- size",
-    "3 palette",
-    "r=" .. tostring(radius),
+    " . ' ˱",
+    "seed sprout",
+    "animated",
+    "plant only",
+    "live " .. tostring(ctx.particleCount()),
   }, "\n")
 end
 
 function brush.paint(ctx, event)
-  if event.type == "digit" then
-    if event.digit == 1 then radius = math.min(radius + 1, 7) end
-    if event.digit == 2 then radius = math.max(radius - 1, 1) end
-    if event.digit == 3 then palette_i = palette_i % #palettes + 1 end
-    return
+  if event.type == "mouse" and event.button == "left" then
+    if event.action == "press" then
+      last_x = event.world_x
+      last_y = event.world_y
+      plant(ctx, event.world_x, event.world_y, true)
+    elseif event.action == "move" then
+      local dx = last_x and math.abs(event.world_x - last_x) or 99
+      local dy = last_y and math.abs(event.world_y - last_y) or 99
+      if dx + dy >= 1 then
+        last_x = event.world_x
+        last_y = event.world_y
+        plant(ctx, event.world_x, event.world_y, false)
+      end
+    elseif event.action == "release" then
+      last_x = nil
+      last_y = nil
+    end
   end
 
-  if event.type == "mouse" and event.button == "left" and event.action ~= "release" then
-    scatter(ctx, event.world_x, event.world_y)
-  end
-
-  if event.type == "paste" then
-    paint_text(ctx, event.world_x, event.world_y, event.text or "")
+  if event.type == "frame" then
+    ctx.eachParticle(function(i)
+      local ok, x, y, vx, vy, glyph, ttl, age = ctx.getParticle(i)
+      if not ok then return end
+      age = age + ctx.dt()
+      local phase = math.min(1, age / ttl)
+      local glyph_i = math.min(#sprout, math.floor(phase * #sprout) + 1)
+      local next_glyph = sprout[glyph_i]
+      x = x + vx * ctx.dt()
+      y = y + vy * ctx.dt()
+      if age >= ttl then
+        ctx.set(cell(x), cell(y), sprout[#sprout])
+        ctx.removeParticle(i)
+      else
+        ctx.setParticle(i, x, y, vx * 0.96, vy * 0.96, next_glyph, ttl, age)
+      end
+    end)
   end
 end
 
