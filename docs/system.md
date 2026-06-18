@@ -121,19 +121,22 @@ loam uses a long-lived arena for app-owned data and keeps per-frame allocations 
 
 ## platform model
 
-the terminal backend is POSIX-oriented:
+terminal IO is split by backend:
 
-- Linux
-- macOS
-- BSD targets with `TIOCGWINSZ`
+- `terminal_posix.zig` handles Linux, macOS, and BSD-style `TIOCGWINSZ` targets
+- `terminal_windows.zig` handles Windows console mode setup, VT output, VT input, and console sizing
+- `terminal_ansi.zig` owns shared ANSI mode strings and SGR mouse parsing
+- `terminal_types.zig` owns shared events, keys, mouse events, paste events, and sizes
 
 release assets are currently built for:
 
 - Linux x86_64
 - Linux aarch64
 - macOS aarch64
+- macOS x86_64
+- Windows x86_64
 
-macOS x86_64 and BSD users should build from source for now. Windows is not supported yet because raw terminal IO, mouse reporting, alternate screen, and clipboard behavior need a separate console backend.
+FreeBSD x86_64 is source-build checked, but no BSD release asset is published until runtime behavior is tested in a BSD terminal. Windows x86_64 is build/release checked; interactive mouse/terminal UX still needs manual validation in Windows Terminal before calling it polished.
 
 ## renderer / Lua boundary update
 

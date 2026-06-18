@@ -28,6 +28,18 @@ jobs:
             os: macos-14
             target: aarch64-macos
             runnable: true
+          - label: macos-x86_64
+            os: macos-14
+            target: x86_64-macos
+            runnable: false
+          - label: freebsd-x86_64
+            os: ubuntu-latest
+            target: x86_64-freebsd
+            runnable: false
+          - label: windows-x86_64
+            os: ubuntu-latest
+            target: x86_64-windows
+            runnable: false
 
     steps:
       - uses: actions/checkout@v4

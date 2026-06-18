@@ -29,7 +29,7 @@ loam --mcp
 
 it exposes `tools/list` and `tools/call`, with `loam_apply_selection` for rectangular text placement.
 
-current version: **0.1.7**
+current version: **0.1.8**
 
 ## install
 
@@ -39,12 +39,18 @@ from a release:
 curl -fsSL https://raw.githubusercontent.com/darkhorseprojects/loam/main/scripts/install.sh | sh
 ```
 
-release assets are built for Linux x86_64, Linux aarch64, and macOS aarch64. macOS x86_64 and BSD users should build from source for now.
+release assets are built for Linux x86_64, Linux aarch64, macOS aarch64, macOS x86_64, and Windows x86_64. BSD users should build from source for now.
 
 optional install location:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/darkhorseprojects/loam/main/scripts/install.sh | LOAM_INSTALL_DIR="$HOME/.local/bin" sh
+```
+
+on Windows PowerShell:
+
+```powershell
+iwr https://raw.githubusercontent.com/darkhorseprojects/loam/main/scripts/install.ps1 -UseB | iex
 ```
 
 from source:
@@ -386,7 +392,7 @@ src/version.zig
 
 `build.zig` reads that Zig constant and stamps both `loam` and `loam-mcp`. `build.zig.zon` is kept as a valid package version, but release tags and install assets are driven by the tag, not by a separate bump script.
 
-release tags should use `v0.1.7`, `v0.2.0`, etc. while a release is still being corrected, recut that broken tag instead of bumping for every failed attempt. update the GitHub wiki at `https://github.com/darkhorseprojects/loam.wiki` separately.
+release tags should use `vX.Y.Z`. while a release is still being corrected, recut that broken tag instead of bumping for every failed attempt. update the GitHub wiki at `https://github.com/darkhorseprojects/loam.wiki` separately.
 
 ## current architecture line
 

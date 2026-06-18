@@ -35,15 +35,7 @@ trap cleanup EXIT INT TERM
 
 case "$(uname -s)" in
   Linux) os="linux" ;;
-  Darwin)
-    os="macos"
-    case "$(uname -m)" in
-      x86_64|amd64)
-        echo "macOS x86_64 release assets are not built yet; build from source for now" >&2
-        exit 1
-        ;;
-    esac
-    ;;
+  Darwin) os="macos" ;;
   FreeBSD|OpenBSD|NetBSD|DragonFly)
     echo "BSD release assets are not built yet; build from source for now" >&2
     exit 1
@@ -79,6 +71,9 @@ fi
 
 tar -xzf "$TMP_DIR/$asset" -C "$TMP_DIR"
 install -m 0755 "$TMP_DIR/loam" "$INSTALL_DIR/loam"
+if [ -f "$TMP_DIR/loam-mcp" ]; then
+  install -m 0755 "$TMP_DIR/loam-mcp" "$INSTALL_DIR/loam-mcp"
+fi
 
 if [ -d "$TMP_DIR/brushes" ]; then
   rm -rf "$DATA_DIR/brushes"
@@ -86,4 +81,7 @@ if [ -d "$TMP_DIR/brushes" ]; then
 fi
 
 echo "installed loam $VERSION to $INSTALL_DIR/loam"
+if [ -f "$INSTALL_DIR/loam-mcp" ]; then
+  echo "installed loam-mcp $VERSION to $INSTALL_DIR/loam-mcp"
+fi
 echo "installed bundled brushes to $DATA_DIR/brushes"
