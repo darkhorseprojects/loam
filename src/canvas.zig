@@ -313,29 +313,40 @@ pub const Canvas = struct {
         return self.world.get(sx, sy);
     }
 
-    pub fn render(self: *const Canvas, writer: *std.Io.Writer, selection: ?Selection) !void {
+    pub fn render(self: *const Canvas, writer: *std.Io.Writer) !void {
         try writer.writeAll("\x1b[?25l\x1b[H\x1b[2J");
 
         var y: usize = 0;
         while (y < self.viewport.height) : (y += 1) {
             try writer.print("\x1b[{d};1H", .{y + 1});
-            var in_selection = false;
             var x: usize = 0;
             while (x < self.viewport.width) : (x += 1) {
-                const world_x = self.viewport.x + x;
-                const world_y = self.viewport.y + y;
-                const selected = if (selection) |s| s.contains(world_x, world_y) else false;
-                if (selected != in_selection) {
-                    try writer.writeAll(if (selected) "\x1b[7m" else "\x1b[27m");
-                    in_selection = selected;
-                }
                 try writer.writeAll(self.cellAtViewport(x, y));
             }
-            if (in_selection) try writer.writeAll("\x1b[27m");
         }
 
         try writer.writeAll("\x1b[0m");
         try self.renderParticles(writer);
+    }
+
+    pub fn renderSelection(self: *const Canvas, writer: *std.Io.Writer, selection: ?Selection) !void {
+        const sel = selection orelse return;
+        const left = @max(@min(sel.x0, sel.x1), self.viewport.x);
+        const top = @max(@min(sel.y0, sel.y1), self.viewport.y);
+        const right = @min(@max(sel.x0, sel.x1), self.viewport.x + self.viewport.width -| 1);
+        const bottom = @min(@max(sel.y0, sel.y1), self.viewport.y + self.viewport.height -| 1);
+        if (left > right or top > bottom) return;
+
+        try writer.writeAll("\x1b[7m");
+        var y = top;
+        while (y <= bottom) : (y += 1) {
+            try writer.print("\x1b[{d};{d}H", .{ y + 1 - self.viewport.y, left + 1 - self.viewport.x });
+            var x = left;
+            while (x <= right) : (x += 1) {
+                try writer.writeAll(self.cellAtViewport(x - self.viewport.x, y - self.viewport.y));
+            }
+        }
+        try writer.writeAll("\x1b[0m");
     }
 
     fn renderParticles(self: *const Canvas, writer: *std.Io.Writer) !void {

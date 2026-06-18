@@ -51,9 +51,10 @@ const App = struct {
 
     fn render(self: *App) !void {
         try self.syncTerminalSize();
-        try self.canvas.render(&self.terminal.writer.interface, self.selection);
+        try self.canvas.render(&self.terminal.writer.interface);
         try self.drawCountdown();
         try self.drawPreview();
+        try self.canvas.renderSelection(&self.terminal.writer.interface, self.selection);
         try self.terminal.writer.interface.flush();
     }
 
