@@ -28,20 +28,20 @@ loam --mcp
 
 it exposes `tools/list` and `tools/call`, with `loam_apply_selection` for rectangular text placement.
 
-current version: **0.1.0**
+current version: **0.1.1**
 
 ## install
 
 from a release:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/darkhorseprojects/loam/v0.1.0/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/darkhorseprojects/loam/v0.1.1/scripts/install.sh | sh
 ```
 
 optional install location:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/darkhorseprojects/loam/v0.1.0/scripts/install.sh | LOAM_INSTALL_DIR="$HOME/.local/bin" sh
+curl -fsSL https://raw.githubusercontent.com/darkhorseprojects/loam/v0.1.1/scripts/install.sh | LOAM_INSTALL_DIR="$HOME/.local/bin" sh
 ```
 
 from source:
@@ -389,4 +389,4 @@ scripts/bump-version.sh 0.2.0
 
 the script updates `src/version.zig`, `build.zig.zon`, README/docs references, and release script defaults. update the GitHub wiki at `https://github.com/darkhorseprojects/loam.wiki` separately.
 
-release tags should use `v0.1.0`, `v0.2.0`, etc.
+release tags should use `v0.1.1`, `v0.2.0`, etc.

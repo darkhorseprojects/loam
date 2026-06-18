@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-VERSION="${LOAM_VERSION:-0.1.0}"
+VERSION="${LOAM_VERSION:-0.1.1}"
 INSTALL_DIR="${LOAM_INSTALL_DIR:-$HOME/.local/bin}"
 TMP_DIR="${TMPDIR:-/tmp}/loam-install.$$"
 

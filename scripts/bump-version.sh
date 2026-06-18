@@ -27,7 +27,7 @@ export NEW_VERSION="$new"
 perl -0pi -e 's/pub const version = "\Q$ENV{OLD_VERSION}\E";/pub const version = "\Q$ENV{NEW_VERSION}\E";/' src/version.zig
 perl -0pi -e 's/\.version = "\Q$ENV{OLD_VERSION}\E"/\.version = "\Q$ENV{NEW_VERSION}\E"/' build.zig.zon
 
-files=$(rg -l "\b\Q$old\E\b" README.md docs scripts .github 2>/dev/null || true)
+files=$(rg -l "\Q$old\E" README.md docs scripts .github 2>/dev/null || true)
 for file in $files; do
   perl -0pi -e 's/\b\Q$ENV{OLD_VERSION}\E\b/\Q$ENV{NEW_VERSION}\E/g' "$file"
 done
