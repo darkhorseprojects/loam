@@ -90,7 +90,7 @@ pub const Terminal = struct {
         raw.lflag.ISIG = false;
         raw.lflag.IEXTEN = false;
 
-        raw.cc[@intFromEnum(std.posix.V.TIME)] = 1;
+        raw.cc[@intFromEnum(std.posix.V.TIME)] = 0;
         raw.cc[@intFromEnum(std.posix.V.MIN)] = 0;
 
         try std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, raw);

@@ -123,8 +123,13 @@ pub const Renderer = struct {
         var row: usize = 0;
         while (row < move.height) : (row += 1) {
             var col: usize = 0;
+            while (col < move.width) : (col += 1) self.setWorld(canvas, source_left + col, source_top + row, Cell.space, false);
+        }
+
+        row = 0;
+        while (row < move.height) : (row += 1) {
+            var col: usize = 0;
             while (col < move.width) : (col += 1) {
-                self.setWorld(canvas, source_left + col, source_top + row, Cell.space, false);
                 const x = move.left + @as(isize, @intCast(col));
                 const y = move.top + @as(isize, @intCast(row));
                 if (x >= 0 and y >= 0) self.setWorld(canvas, @intCast(x), @intCast(y), move.cells[row * move.width + col], false);

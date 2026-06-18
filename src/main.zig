@@ -444,6 +444,7 @@ pub fn main(init: std.process.Init) !void {
             const now = terminal_mod.nowSeconds();
             const dt = @min(now - last_time, 0.05);
             last_time = now;
+            app.updateEscapeClear(dt);
             app.handleEvent(event, dt, now) catch |err| switch (err) {
                 error.Quit => return,
                 else => return err,
