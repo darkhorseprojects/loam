@@ -31,6 +31,7 @@ const brush_scroll_cooldown_s = 0.35;
 const escape_clear_countdown_s = 1.5;
 const escape_clear_step_s = 0.5;
 const escape_repeat_window_s = 0.75;
+const escape_release_quiet_s = 1.5;
 
 const App = struct {
     allocator: std.mem.Allocator,
@@ -117,7 +118,7 @@ const App = struct {
     }
 
     fn updateEscapeClear(self: *App, dt: f64, now: f64) void {
-        if (self.escape_latched and now - self.escape_last_time > escape_repeat_window_s) self.escape_latched = false;
+        if (self.escape_latched and now - self.escape_last_time > escape_release_quiet_s) self.escape_latched = false;
         if (self.escape_countdown <= 0) return;
         self.escape_countdown -= dt;
         if (self.escape_countdown <= 0) {
@@ -246,6 +247,11 @@ const App = struct {
     }
 
     fn handleEvent(self: *App, event: terminal_mod.Event, dt: f64, time: f64) !void {
+        if (self.escape_countdown > 0 or self.escape_latched) {
+            if (isEscapeEvent(event)) self.handleEscapePress(time);
+            return;
+        }
+
         switch (event) {
             .key => |key| switch (key) {
                 .q => return error.Quit,
@@ -504,6 +510,16 @@ fn usage() !void {
         \\
         \\
     , .{});
+}
+
+fn isEscapeEvent(event: terminal_mod.Event) bool {
+    return switch (event) {
+        .key => |key| switch (key) {
+            .escape => true,
+            else => false,
+        },
+        else => false,
+    };
 }
 
 fn selectionBetween(a: Point, b: Point) Selection {
