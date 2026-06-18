@@ -29,7 +29,7 @@ loam --mcp
 
 it exposes `tools/list` and `tools/call`, with `loam_apply_selection` for rectangular text placement.
 
-current version: **0.1.8**
+current version: **0.1.9**
 
 ## install
 
