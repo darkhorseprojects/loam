@@ -108,9 +108,22 @@ fn appendBrushDir(allocator: std.mem.Allocator, io: std.Io, paths: *std.ArrayLis
     var it = dir.iterate();
     while (try it.next(io)) |entry| {
         if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".lua")) {
-            try paths.append(allocator, try std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir_path, entry.name }));
+            const path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir_path, entry.name });
+            if (containsStem(paths.items, path)) {
+                allocator.free(path);
+                continue;
+            }
+            try paths.append(allocator, path);
         }
     }
+}
+
+fn containsStem(paths: []const []const u8, path: []const u8) bool {
+    const needle = brushFileStem(path);
+    for (paths) |existing| {
+        if (std.mem.eql(u8, needle, brushFileStem(existing))) return true;
+    }
+    return false;
 }
 
 fn stem(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
