@@ -140,10 +140,14 @@ FreeBSD x86_64 is source-build checked, but no BSD release asset is published un
 
 ## renderer / Lua boundary update
 
-rendering never calls Lua. `lua_bridge.zig` rebuilds the preview cache after brush load or brush events. `renderer.zig` consumes cached cells only.
+rendering never calls Lua. `lua_bridge.zig` rebuilds the preview cache after brush load or brush events. `renderer.zig` consumes cached cells and engine status lines only.
 
-`canvas.zig` now owns durable cells and particles only. brush drag previews use a renderer-owned overlay; moving selections use a separate move overlay. neither is written into the durable canvas until an explicit commit/release.
+`canvas.zig` now owns durable cells and particles only. brush drag previews use a renderer-owned overlay; moving selections use a separate move overlay. neither is written into the durable canvas until an explicit commit/release. status lines such as text input and escape clear are stacked by the renderer at the top-left so they do not overlap.
+
+## text input boundary
+
+Lua brushes request text capture with `ctx.requestText(label)`. the app loop owns the terminal input buffer, top-left status text, enter/escape handling, and per-character dispatch. Lua receives only ordinary `paint(ctx, event)` calls with `event.type == "text"`; it never reads stdin or listens to the terminal directly.
 
 ## brush inventory
 
-`lua_bridge.zig` keeps `__loam_inventory[path] = brush_table` in the Lua VM. Brush switching reuses the cached table instead of reloading the file, so brush state survives until process exit.
+`lua_bridge.zig` keeps `__loam_inventory[path] = brush_table` in the Lua VM. Brush switching reuses the cached table instead of reloading the file, so brush state survives until process exit. bundled brushes use `0` to reset their cached state to defaults.

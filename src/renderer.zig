@@ -22,6 +22,11 @@ pub const MoveOverlay = struct {
     cells: []const Cell,
 };
 
+pub const StatusLine = struct {
+    text: []const u8,
+    reverse: bool = true,
+};
+
 pub const Renderer = struct {
     allocator: std.mem.Allocator,
     width: usize,
@@ -63,8 +68,8 @@ pub const Renderer = struct {
         self.full = true;
     }
 
-    pub fn render(self: *Renderer, writer: *std.Io.Writer, canvas: *const Canvas, brush_overlay: *const Overlay, preview: *const Overlay, selection: ?Selection, move: ?MoveOverlay, countdown: ?usize) !void {
-        self.compose(canvas, brush_overlay, preview, selection, move, countdown);
+    pub fn render(self: *Renderer, writer: *std.Io.Writer, canvas: *const Canvas, brush_overlay: *const Overlay, preview: *const Overlay, selection: ?Selection, move: ?MoveOverlay, statuses: []const StatusLine) !void {
+        self.compose(canvas, brush_overlay, preview, selection, move, statuses);
         if (self.full) {
             try writer.writeAll("\x1b[2J");
             @memset(self.prev, DisplayCell{});
@@ -73,7 +78,7 @@ pub const Renderer = struct {
         try self.flush(writer);
     }
 
-    fn compose(self: *Renderer, canvas: *const Canvas, brush_overlay: *const Overlay, preview: *const Overlay, selection: ?Selection, move: ?MoveOverlay, countdown: ?usize) void {
+    fn compose(self: *Renderer, canvas: *const Canvas, brush_overlay: *const Overlay, preview: *const Overlay, selection: ?Selection, move: ?MoveOverlay, statuses: []const StatusLine) void {
         var y: usize = 0;
         while (y < self.height) : (y += 1) {
             var x: usize = 0;
@@ -83,7 +88,7 @@ pub const Renderer = struct {
         self.applyBrushOverlay(brush_overlay);
         if (move) |m| self.applyMove(canvas, m);
         self.applyPreview(preview);
-        self.applyCountdown(countdown);
+        self.applyStatuses(statuses);
         self.applySelection(canvas, if (move) |m| moveSelection(m) else selection);
     }
 
@@ -145,12 +150,14 @@ pub const Renderer = struct {
         }
     }
 
-    fn applyCountdown(self: *Renderer, n: ?usize) void {
-        const value = n orelse return;
-        var buf: [32]u8 = undefined;
-        const text = std.fmt.bufPrint(&buf, " escape clear {d} ", .{value}) catch return;
-        var x: usize = 0;
-        while (x < text.len and x < self.width) : (x += 1) self.put(x, 0, Cell.init(text[x .. x + 1]), true);
+    fn applyStatuses(self: *Renderer, statuses: []const StatusLine) void {
+        const count = @min(statuses.len, self.height);
+        var y: usize = 0;
+        while (y < count) : (y += 1) {
+            const status = statuses[y];
+            var x: usize = 0;
+            while (x < status.text.len and x < self.width) : (x += 1) self.put(x, y, Cell.init(status.text[x .. x + 1]), status.reverse);
+        }
     }
 
     fn applySelection(self: *Renderer, canvas: *const Canvas, selection: ?Selection) void {

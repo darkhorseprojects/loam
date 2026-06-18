@@ -14,6 +14,8 @@ pub fn keyFromByte(b: u8) types.Key {
         'r' => .r,
         'v' => .v,
         ' ' => .space,
+        '\r', '\n' => .enter,
+        0x08, 0x7f => .backspace,
         '0'...'9' => .{ .digit = b - '0' },
         else => .{ .other = b },
     };

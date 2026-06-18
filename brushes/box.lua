@@ -107,6 +107,10 @@ local function apply_digit(ctx, digit)
   elseif digit == 4 then
     state.pattern = state.pattern % #patterns + 1
   elseif digit == 0 then
+    state.style = 2
+    state.corner = 1
+    state.fill = 1
+    state.pattern = 1
     state.drag = nil
     state.last = nil
     ctx.stageClear()

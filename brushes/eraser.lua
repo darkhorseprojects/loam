@@ -43,6 +43,7 @@ end
 
 function brush.paint(ctx, event)
   if event.type == "digit" then
+    if event.digit == 0 then radius = 1; last = nil end
     if event.digit == 1 then radius = math.min(radius + 1, 12) end
     if event.digit == 2 then radius = math.max(radius - 1, 1) end
     return

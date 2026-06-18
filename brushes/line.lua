@@ -82,10 +82,16 @@ function brush.preview(ctx, width, height)
 end
 
 function brush.paint(ctx, event)
-  if event.type == "digit" and event.digit == 1 then
-    style_i = style_i % #styles + 1
+  if event.type == "digit" then
+    if event.digit == 0 then
+      style_i = 2
+      drag = nil
+      ctx.stageClear()
+    elseif event.digit == 1 then
+      style_i = style_i % #styles + 1
+      if drag then preview_line(ctx, drag.last_x or drag.x, drag.last_y or drag.y) end
+    end
     brush.glyph = pick(style().h, 0)
-    if drag then preview_line(ctx, drag.last_x or drag.x, drag.last_y or drag.y) end
     return
   end
 

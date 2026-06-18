@@ -262,8 +262,9 @@ the active brush decides what `1`, `2`, `3`, etc. mean. in the shipped brushes:
 - `seed`: animated sprout placement
 - `soil`: size and glyph palette
 - `moss`, `floral`: size and glyph palette, attached growth
+- `text`: normal text placement, then larger ASCII-cell text modes
 
-digits also work during an active staged drag, so a brush can redraw its preview immediately.
+`0` resets bundled brush state to its default. digits also work during an active staged drag, so a brush can redraw its preview immediately.
 
 ## coordinates and glyphs
 
@@ -288,10 +289,10 @@ the engine will store and render them. your terminal/font decides whether a glyp
 | `ctx.set(x, y, glyph)` | write one permanent cell |
 | `ctx.get(x, y)` | read one cell, returns space outside the world |
 | `ctx.stageSet(x, y, glyph)` | write one temporary preview cell |
-| `ctx.stageGet(x, y)` | read staged cell |
 | `ctx.stageClear()` | clear preview layer |
 | `ctx.commitStage()` | commit staged cells into the world |
 | `ctx.clear()` | clear canvas and particles |
+| `ctx.requestText(label)` | ask the engine to capture text and send `text` events |
 | `ctx.width()` / `ctx.height()` | visible viewport size |
 | `ctx.worldWidth()` / `ctx.worldHeight()` | persistent world size |
 | `ctx.emit(x, y, glyph, ttl, vx, vy)` | create a particle |
@@ -333,6 +334,15 @@ paste:
 { type = "paste", x = 1, y = 1, text = "copied text", positioned = true }
 ```
 
+text capture, after a brush calls `ctx.requestText(label)`:
+
+```lua
+{ type = "text", action = "input", text = "a" }
+{ type = "text", action = "backspace", text = "" }
+{ type = "text", action = "submit", text = "typed text" }
+{ type = "text", action = "cancel", text = "typed text" }
+```
+
 resize:
 
 ```lua
@@ -362,8 +372,11 @@ a future sandbox mode can tighten this further by opening only the functions loa
 ```text
 src/
   main.zig          app loop, args, input routing
-  terminal.zig      raw terminal, mouse, paste, resize
-  canvas.zig        world grid, stage, particles, render
+  terminal.zig      backend selector
+  terminal_posix.zig raw terminal, mouse, paste, resize on POSIX
+  terminal_windows.zig Windows console backend
+  terminal_types.zig shared input event types
+  canvas.zig        world grid, overlays, particles
   lua_bridge.zig    ctx/event boundary
   brushes.zig       brush discovery
   mcp.zig           optional stdio MCP helper server, also reachable through `loam --mcp`
@@ -376,6 +389,7 @@ brushes/
   particles.lua
   seed.lua
   soil.lua
+  text.lua
 docs/
   brush-api.md
   system.md
@@ -387,7 +401,7 @@ scripts/
 
 ## current architecture line
 
-rendering never calls Lua. brush previews are rebuilt by the brush host after brush load or brush events, then cached as cells. the renderer composes durable canvas cells, particles, brush overlay, move overlay, selection, countdown, and cached preview into a diffed terminal frame.
+rendering never calls Lua. brush previews are rebuilt by the brush host after brush load or brush events, then cached as cells. the renderer composes durable canvas cells, particles, brush overlay, move overlay, selection, status lines, and cached preview into a diffed terminal frame.
 
 canvas owns only durable cells and particles. selection, moves, preview, and brush drag overlays are visual/editor state, not canvas state.
 

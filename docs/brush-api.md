@@ -65,6 +65,7 @@ ctx.line(x0, y0, x1, y1, glyph)
 ctx.fill(x, y, width, height, glyph)
 ctx.rect(x, y, width, height, edge_glyph, fill_glyph_or_nil)
 ctx.clear()                 -- clears canvas and particles
+ctx.requestText(label)      -- asks the engine to capture text input
 ```
 
 `glyph` is a Lua string. the canvas stores up to 8 UTF-8 bytes per cell. Prefer `line`, `fill`, and `rect` for hot paths: Lua chooses the brush intent, Zig touches cells in bulk.
@@ -75,7 +76,6 @@ use the stage for temporary drag previews:
 
 ```lua
 ctx.stageSet(x, y, glyph)
-local staged = ctx.stageGet(x, y)
 ctx.stageClear()
 ctx.commitStage()
 ```
@@ -168,6 +168,27 @@ if event.type == "paste" then
 end
 ```
 
+text capture:
+
+```lua
+-- request capture from any brush event, usually a mouse press
+ctx.requestText("text")
+
+if event.type == "text" then
+  if event.action == "input" then
+    ctx.set(x, y, event.text) -- one engine-captured character
+  elseif event.action == "backspace" then
+    -- erase brush-owned previous placement
+  elseif event.action == "submit" then
+    -- finish input
+  elseif event.action == "cancel" then
+    -- end input without reading terminal state directly
+  end
+end
+```
+
+Lua never reads terminal input directly. the engine records the text buffer, displays the status line, and sends text events through `paint`.
+
 resize:
 
 ```lua
@@ -226,12 +247,14 @@ return brush
 
 ## shipped brush controls
 
-- `box`: `1` style, `2` corner, `3` fill, `4` edge pattern, `0` cancel
+- `0`: reset bundled brush state to defaults
+- `box`: `1` style, `2` corner, `3` fill, `4` edge pattern
 - `line`: `1` style; styles include horizontal, vertical, diagonal, and reverse-diagonal glyph variants
 - `eraser`: `1` larger, `2` smaller
 - `seed`: animated sprout placement
 - `soil`: `1` larger, `2` smaller, `3` palette
 - `moss`, `floral`: `1` larger, `2` smaller, `3` palette; growth attaches to nearby cells
+- `text`: `1` larger text mode, `2` smaller text mode; mouse press starts engine-owned text capture
 - `particles`: animated particle burst
 
 ## preview cache

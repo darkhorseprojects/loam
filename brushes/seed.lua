@@ -41,6 +41,12 @@ function brush.preview(ctx, width, height)
 end
 
 function brush.paint(ctx, event)
+  if event.type == "digit" and event.digit == 0 then
+    last_x = nil
+    last_y = nil
+    return
+  end
+
   if event.type == "mouse" and event.button == "left" then
     if event.action == "press" then
       last_x = event.world_x

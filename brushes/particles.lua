@@ -31,8 +31,9 @@ function brush.preview(ctx, width, height)
 end
 
 function brush.paint(ctx, event)
-  if event.type == "digit" and event.digit == 1 then
-    glyph_i = glyph_i % #glyphs + 1
+  if event.type == "digit" then
+    if event.digit == 0 then glyph_i = 1 end
+    if event.digit == 1 then glyph_i = glyph_i % #glyphs + 1 end
     brush.glyph = glyphs[glyph_i]
   end
 

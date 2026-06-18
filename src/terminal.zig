@@ -12,6 +12,8 @@ pub const MouseAction = types.MouseAction;
 pub const MouseEvent = types.MouseEvent;
 pub const Key = types.Key;
 pub const PasteEvent = types.PasteEvent;
+pub const TextAction = types.TextAction;
+pub const TextEvent = types.TextEvent;
 pub const Event = types.Event;
 
 pub const Terminal = backend.Terminal;

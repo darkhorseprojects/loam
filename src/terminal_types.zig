@@ -34,6 +34,8 @@ pub const Key = union(enum) {
     r,
     v,
     space,
+    enter,
+    backspace,
     digit: u8,
     other: u8,
 };
@@ -45,11 +47,24 @@ pub const PasteEvent = struct {
     positioned: bool,
 };
 
+pub const TextAction = enum {
+    input,
+    backspace,
+    submit,
+    cancel,
+};
+
+pub const TextEvent = struct {
+    action: TextAction,
+    text: []const u8,
+};
+
 pub const Event = union(enum) {
     key: Key,
     mouse: MouseEvent,
     resize: Size,
     paste: PasteEvent,
+    text: TextEvent,
     frame,
     quit,
 };

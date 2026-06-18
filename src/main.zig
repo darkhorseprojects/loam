@@ -42,6 +42,10 @@ const App = struct {
     brushes: *BrushSet,
     clipboard: std.ArrayList(u8),
     move_cells: std.ArrayList(Cell),
+    text_buffer: std.ArrayList(u8),
+    text_capture: bool = false,
+    text_label: [64]u8 = undefined,
+    text_label_len: usize = 0,
     selection: ?Selection = null,
     moving: ?MoveState = null,
     right_down: bool = false,
@@ -63,11 +67,24 @@ const App = struct {
 
     fn render(self: *App, now: f64) !void {
         try self.syncTerminalSize(now);
-        const countdown = if (self.escape_countdown > 0)
-            @as(usize, @intFromFloat(@ceil(self.escape_countdown / escape_clear_step_s)))
-        else
-            null;
-        try self.renderer.render(&self.terminal.writer.interface, &self.canvas, &self.bridge.overlay, &self.bridge.preview, self.selection, self.moveOverlay(), countdown);
+        var status_storage: [2]renderer_mod.StatusLine = undefined;
+        var status_count: usize = 0;
+        var text_status: [160]u8 = undefined;
+        var countdown_status: [32]u8 = undefined;
+        if (self.text_capture) {
+            const label = self.text_label[0..self.text_label_len];
+            const shown = self.text_buffer.items[0..@min(self.text_buffer.items.len, 80)];
+            const text = std.fmt.bufPrint(&text_status, " {s}: {s}_ ", .{ label, shown }) catch " text input ";
+            status_storage[status_count] = .{ .text = text };
+            status_count += 1;
+        }
+        if (self.escape_countdown > 0) {
+            const countdown = @as(usize, @intFromFloat(@ceil(self.escape_countdown / escape_clear_step_s)));
+            const text = std.fmt.bufPrint(&countdown_status, " escape clear {d} ", .{countdown}) catch " escape clear ";
+            status_storage[status_count] = .{ .text = text };
+            status_count += 1;
+        }
+        try self.renderer.render(&self.terminal.writer.interface, &self.canvas, &self.bridge.overlay, &self.bridge.preview, self.selection, self.moveOverlay(), status_storage[0..status_count]);
         try self.terminal.writer.interface.flush();
     }
 
@@ -79,6 +96,7 @@ const App = struct {
         self.right_current = null;
         self.left_down = false;
         self.left_moved = false;
+        self.cancelTextCapture();
         self.bridge.overlay.clear();
     }
 
@@ -188,7 +206,7 @@ const App = struct {
 
     fn pasteAt(self: *App, x: usize, y: usize, dt: f64, time: f64) !void {
         if (self.clipboard.items.len == 0) return;
-        try self.bridge.paint(.{ .paste = .{ .x = x, .y = y, .text = self.clipboard.items, .positioned = true } }, dt, time);
+        try self.paintBrush(.{ .paste = .{ .x = x, .y = y, .text = self.clipboard.items, .positioned = true } }, dt, time);
     }
 
     fn beginMove(self: *App, sel: Selection, at: Point) !void {
@@ -246,7 +264,70 @@ const App = struct {
         self.moving = null;
     }
 
+    fn paintBrush(self: *App, event: terminal_mod.Event, dt: f64, time: f64) !void {
+        try self.bridge.paint(event, dt, time);
+        var label_buf: [64]u8 = undefined;
+        if (self.bridge.takeTextRequest(&label_buf)) |label| self.beginTextCapture(label);
+    }
+
+    fn beginTextCapture(self: *App, label: []const u8) void {
+        self.text_capture = true;
+        self.left_down = false;
+        self.left_moved = false;
+        self.text_buffer.clearRetainingCapacity();
+        self.text_label_len = @min(label.len, self.text_label.len);
+        @memcpy(self.text_label[0..self.text_label_len], label[0..self.text_label_len]);
+        self.cancelEscapeClear();
+    }
+
+    fn cancelTextCapture(self: *App) void {
+        self.text_capture = false;
+        self.text_buffer.clearRetainingCapacity();
+        self.text_label_len = 0;
+    }
+
+    fn handleTextCaptureEvent(self: *App, event: terminal_mod.Event, dt: f64, time: f64) !bool {
+        switch (event) {
+            .key => |key| switch (key) {
+                .escape => {
+                    try self.paintBrush(.{ .text = .{ .action = .cancel, .text = self.text_buffer.items } }, dt, time);
+                    self.cancelTextCapture();
+                    return true;
+                },
+                .enter => {
+                    try self.paintBrush(.{ .text = .{ .action = .submit, .text = self.text_buffer.items } }, dt, time);
+                    self.cancelTextCapture();
+                    return true;
+                },
+                .backspace => {
+                    if (self.text_buffer.items.len > 0) _ = self.text_buffer.pop();
+                    try self.paintBrush(.{ .text = .{ .action = .backspace, .text = "" } }, dt, time);
+                    return true;
+                },
+                else => if (charFromKey(key)) |ch| {
+                    var buf = [_]u8{ch};
+                    try self.text_buffer.append(self.allocator, ch);
+                    try self.paintBrush(.{ .text = .{ .action = .input, .text = buf[0..] } }, dt, time);
+                    return true;
+                },
+            },
+            .paste => |paste| {
+                for (paste.text) |ch| {
+                    if (!isPrintableAscii(ch)) continue;
+                    var buf = [_]u8{ch};
+                    try self.text_buffer.append(self.allocator, ch);
+                    try self.paintBrush(.{ .text = .{ .action = .input, .text = buf[0..] } }, dt, time);
+                }
+                return true;
+            },
+            .quit => return error.Quit,
+            else => return true,
+        }
+        return true;
+    }
+
     fn handleEvent(self: *App, event: terminal_mod.Event, dt: f64, time: f64) !void {
+        if (self.text_capture and try self.handleTextCaptureEvent(event, dt, time)) return;
         if (self.escape_countdown > 0 or self.escape_latched) {
             if (isEscapeEvent(event)) self.handleEscapePress(time);
             return;
@@ -268,7 +349,7 @@ const App = struct {
                     self.right_current = null;
                 },
                 .v => try self.pasteAt(self.last_mouse.x, self.last_mouse.y, dt, time),
-                .digit => try self.bridge.paint(.{ .key = key }, dt, time),
+                .digit => try self.paintBrush(.{ .key = key }, dt, time),
                 else => self.cancelEscapeClear(),
             },
             .mouse => |mouse| {
@@ -314,7 +395,7 @@ const App = struct {
                         } else if (mouse.action == .press and self.selection != null and self.selection.?.contains(world_mouse.x, world_mouse.y)) {
                             try self.beginMove(self.selection.?, world_mouse);
                         } else {
-                            try self.bridge.paint(.{ .mouse = mouse }, dt, time);
+                            try self.paintBrush(.{ .mouse = mouse }, dt, time);
                         }
                     },
                     .right => {
@@ -362,11 +443,31 @@ const App = struct {
                 const at = if (paste.positioned) Point{ .x = paste.x, .y = paste.y } else self.last_mouse;
                 try self.pasteAt(at.x, at.y, dt, time);
             },
+            .text => {},
             .frame => {},
             .quit => return error.Quit,
         }
     }
 };
+
+fn isPrintableAscii(ch: u8) bool {
+    return ch >= 0x20 and ch <= 0x7e;
+}
+
+fn charFromKey(key: terminal_mod.Key) ?u8 {
+    return switch (key) {
+        .q => 'q',
+        .b => 'b',
+        .n => 'n',
+        .c => 'c',
+        .r => 'r',
+        .v => 'v',
+        .space => ' ',
+        .digit => |d| '0' + d,
+        .other => |code| if (isPrintableAscii(code)) code else null,
+        else => null,
+    };
+}
 
 pub fn main(init: std.process.Init) !void {
     const arena = init.arena.allocator();
@@ -438,6 +539,7 @@ pub fn main(init: std.process.Init) !void {
         .brushes = &brushes,
         .clipboard = .empty,
         .move_cells = .empty,
+        .text_buffer = .empty,
     };
     app.bridge.canvas = &app.canvas;
     app.bridge.register();
@@ -477,7 +579,7 @@ pub fn main(init: std.process.Init) !void {
         if (had_countdown) {
             try app.render(now);
         } else if (app.bridge.wantsFrames()) {
-            try app.bridge.paint(.frame, dt, now);
+            try app.paintBrush(.frame, dt, now);
             try app.render(now);
         }
         terminal_mod.sleepNanos(16 * std.time.ns_per_ms);

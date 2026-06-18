@@ -19,6 +19,9 @@ pub const LuaBridge = struct {
     rng: std.Random,
     time: f64 = 0,
     dt: f64 = 0,
+    text_request: bool = false,
+    text_request_label: [64]u8 = undefined,
+    text_request_label_len: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator, temp_allocator: std.mem.Allocator, io: std.Io, lua: *Lua, canvas: *Canvas, rng: std.Random, width: usize, height: usize) !LuaBridge {
         return .{
@@ -137,6 +140,14 @@ pub const LuaBridge = struct {
         try self.rebuildPreview();
     }
 
+    pub fn takeTextRequest(self: *LuaBridge, label_out: []u8) ?[]const u8 {
+        if (!self.text_request) return null;
+        self.text_request = false;
+        const n = @min(label_out.len, self.text_request_label_len);
+        @memcpy(label_out[0..n], self.text_request_label[0..n]);
+        return label_out[0..n];
+    }
+
     pub fn wantsFrames(self: *LuaBridge) bool {
         if (self.canvas.particleCount() > 0) return true;
         if (self.lua.getGlobal("__loam_brush") != .table) {
@@ -197,6 +208,7 @@ pub const LuaBridge = struct {
             .{ "stageClear", zlua.wrap(ctxOverlayClear) },
             .{ "commitStage", zlua.wrap(ctxCommitOverlay) },
             .{ "clear", zlua.wrap(ctxClear) },
+            .{ "requestText", zlua.wrap(ctxRequestText) },
             .{ "emit", zlua.wrap(ctxEmit) },
             .{ "spawn", zlua.wrap(ctxEmit) },
             .{ "size", zlua.wrap(ctxSize) },
@@ -239,6 +251,8 @@ pub const LuaBridge = struct {
                     .r => pushFieldS(lua, -1, "key", "r"),
                     .v => pushFieldS(lua, -1, "key", "v"),
                     .space => pushFieldS(lua, -1, "key", "space"),
+                    .enter => pushFieldS(lua, -1, "key", "enter"),
+                    .backspace => pushFieldS(lua, -1, "key", "backspace"),
                     .other => |code| pushFieldI(lua, -1, "code", code),
                 }
             },
@@ -272,6 +286,16 @@ pub const LuaBridge = struct {
                 pushFieldI(lua, -1, "x", self.canvas.viewportToWorldX(p.x) + 1);
                 pushFieldI(lua, -1, "y", self.canvas.viewportToWorldY(p.y) + 1);
                 pushFieldS(lua, -1, "text", p.text);
+            },
+            .text => |t| {
+                pushFieldS(lua, -1, "type", "text");
+                pushFieldS(lua, -1, "action", switch (t.action) {
+                    .input => "input",
+                    .backspace => "backspace",
+                    .submit => "submit",
+                    .cancel => "cancel",
+                });
+                pushFieldS(lua, -1, "text", t.text);
             },
             .frame => pushFieldS(lua, -1, "type", "frame"),
             .quit => pushFieldS(lua, -1, "type", "quit"),
@@ -422,6 +446,16 @@ fn ctxCommitOverlay(lua: *Lua) i32 {
 
 fn ctxClear(lua: *Lua) i32 {
     bridge(lua).canvas.clear();
+    return 0;
+}
+
+fn ctxRequestText(lua: *Lua) i32 {
+    const b = bridge(lua);
+    const label = lua.toString(1) catch "text";
+    const n = @min(label.len, b.text_request_label.len);
+    @memcpy(b.text_request_label[0..n], label[0..n]);
+    b.text_request_label_len = n;
+    b.text_request = true;
     return 0;
 }
 fn ctxSize(lua: *Lua) i32 {
