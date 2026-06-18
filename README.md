@@ -391,3 +391,7 @@ release tags should use `v0.1.7`, `v0.2.0`, etc. while a release is still being 
 rendering never calls Lua. brush previews are rebuilt by the brush host after brush load or brush events, then cached as cells. the renderer composes durable canvas cells, particles, brush overlay, move overlay, selection, countdown, and cached preview into a diffed terminal frame.
 
 canvas owns only durable cells and particles. selection, moves, preview, and brush drag overlays are visual/editor state, not canvas state.
+
+## brush inventory
+
+brushes are loaded into a Lua inventory for the lifetime of the app. switching away from a brush does not reset its Lua table; when you switch back, its style/radius/preset state is retained until loam exits.

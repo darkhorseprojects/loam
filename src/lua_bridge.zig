@@ -51,6 +51,19 @@ pub const LuaBridge = struct {
     pub fn loadBrush(self: *LuaBridge, path: []const u8) !void {
         self.overlay.clear();
         self.preview.clear();
+
+        self.pushInventory();
+        const inventory = self.lua.absIndex(-1);
+        _ = self.lua.pushString(path);
+        if (self.lua.getTable(inventory) == .table) {
+            self.lua.pushValue(-1);
+            self.lua.setGlobal("__loam_brush");
+            self.lua.pop(2);
+            try self.rebuildPreview();
+            return;
+        }
+        self.lua.pop(1);
+
         var file = try std.Io.Dir.cwd().openFile(self.io, path, .{});
         defer file.close(self.io);
 
@@ -71,18 +84,33 @@ pub const LuaBridge = struct {
         if (returned > 0 and self.lua.typeOf(-1) == .table) {
             self.lua.pushValue(-1);
             self.lua.setGlobal("__loam_brush");
+            _ = self.lua.pushString(path);
+            self.lua.pushValue(-2);
+            self.lua.setTable(inventory);
             self.lua.pop(returned);
         } else {
             if (returned > 0) self.lua.pop(returned);
             if (self.lua.getGlobal("brush") != .table) {
-                self.lua.pop(1);
+                self.lua.pop(2);
                 return error.BrushMustReturnTable;
             }
             self.lua.pushValue(-1);
             self.lua.setGlobal("__loam_brush");
+            _ = self.lua.pushString(path);
+            self.lua.pushValue(-2);
+            self.lua.setTable(inventory);
             self.lua.pop(1);
         }
+        self.lua.pop(1);
         try self.rebuildPreview();
+    }
+
+    fn pushInventory(self: *LuaBridge) void {
+        if (self.lua.getGlobal("__loam_inventory") == .table) return;
+        self.lua.pop(1);
+        self.lua.newTable();
+        self.lua.pushValue(-1);
+        self.lua.setGlobal("__loam_inventory");
     }
 
     pub fn paint(self: *LuaBridge, event: terminal_mod.Event, dt: f64, time: f64) !void {

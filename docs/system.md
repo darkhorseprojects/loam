@@ -134,3 +134,7 @@ Windows is not supported yet because raw terminal IO, mouse reporting, alternate
 rendering never calls Lua. `lua_bridge.zig` rebuilds the preview cache after brush load or brush events. `renderer.zig` consumes cached cells only.
 
 `canvas.zig` now owns durable cells and particles only. brush drag previews use a renderer-owned overlay; moving selections use a separate move overlay. neither is written into the durable canvas until an explicit commit/release.
+
+## brush inventory
+
+`lua_bridge.zig` keeps `__loam_inventory[path] = brush_table` in the Lua VM. Brush switching reuses the cached table instead of reloading the file, so brush state survives until process exit.

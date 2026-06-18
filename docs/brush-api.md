@@ -235,3 +235,7 @@ return brush
 ## preview cache
 
 `brush.preview(ctx, width, height)` is called by the brush host after brush load or brush events, not by the renderer. rendering never calls Lua. returned preview text is copied into a Zig-owned preview cache.
+
+## brush inventory
+
+Each brush file is loaded once per app session and cached by path. Switching brushes reselects the cached Lua table, so brush-local state persists until loam exits.
