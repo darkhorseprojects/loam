@@ -37,7 +37,7 @@ case "$(uname -s)" in
   Linux) os="linux" ;;
   Darwin) os="macos" ;;
   FreeBSD|OpenBSD|NetBSD|DragonFly)
-    echo "BSD release assets are not built yet; build from source for now" >&2
+    echo "BSD release assets are not published; build from source" >&2
     exit 1
     ;;
   *)

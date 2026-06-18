@@ -2,7 +2,7 @@
 
 loam is a fullscreen terminal-cell painter written in Zig 0.16.0. every brush is a Lua script.
 
-the engine is intentionally boring:
+the engine stays small and direct:
 
 - raw terminal mode, alternate screen, mouse input, paste, resize
 - a persistent cell canvas plus a renderer-owned brush overlay
@@ -39,7 +39,7 @@ from a release:
 curl -fsSL https://raw.githubusercontent.com/darkhorseprojects/loam/main/scripts/install.sh | sh
 ```
 
-release assets are built for Linux x86_64, Linux aarch64, macOS aarch64, macOS x86_64, and Windows x86_64. BSD users should build from source for now.
+release assets are built for Linux x86_64, Linux aarch64, macOS aarch64, macOS x86_64, and Windows x86_64. BSD release assets are not published.
 
 optional install location:
 
@@ -381,18 +381,6 @@ wiki/
 scripts/
   install.sh
 ```
-
-## versioning
-
-the single source of truth is:
-
-```zig
-src/version.zig
-```
-
-`build.zig` reads that Zig constant and stamps both `loam` and `loam-mcp`. `build.zig.zon` is kept as a valid package version, but release tags and install assets are driven by the tag, not by a separate bump script.
-
-release tags should use `vX.Y.Z`. while a release is still being corrected, recut that broken tag instead of bumping for every failed attempt. update the GitHub wiki at `https://github.com/darkhorseprojects/loam.wiki` separately.
 
 ## current architecture line
 
