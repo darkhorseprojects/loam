@@ -132,9 +132,9 @@ function brush.preview(ctx, width, height)
   end
   return table.concat({
     corner("tl") .. top .. corner("tr"),
-    row("box " .. s.name),
-    row("1style 2" .. corner_sets[state.corner].name),
-    row("3fill" .. fill() .. " 4" .. pattern().name),
+    row("box " .. s.name .. " [0]"),
+    row("[1] style [2] " .. corner_sets[state.corner].name),
+    row("[3] fill " .. fill() .. " [4] " .. pattern().name),
     corner("bl") .. bottom .. corner("br"),
   }, "\n")
 end

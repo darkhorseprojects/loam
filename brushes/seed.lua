@@ -36,7 +36,7 @@ function brush.preview(ctx, width, height)
     "seed sprout",
     "animated",
     "plant only",
-    "live " .. tostring(ctx.particleCount()),
+    "[0] reset live " .. tostring(ctx.particleCount()),
   }, "\n")
 end
 

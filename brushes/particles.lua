@@ -25,7 +25,7 @@ function brush.preview(ctx, width, height)
     "    " .. glyphs[glyph_i] .. "     ",
     "  . * +  ",
     " burst   ",
-    "1 glyph  ",
+    "[1] glyph [0] reset",
     "count " .. tostring(ctx.particleCount()),
   }, "\n")
 end

@@ -38,9 +38,9 @@ function brush.preview(ctx, width, height)
   return table.concat({
     " " .. p.glyphs[1] .. p.glyphs[2] .. p.glyphs[3],
     "soil " .. p.name,
-    "1+ 2- size",
-    "3 palette",
-    "r=" .. tostring(radius),
+    "[1]+ [2]- size",
+    "[3] palette",
+    "[0] reset r=" .. tostring(radius),
   }, "\n")
 end
 

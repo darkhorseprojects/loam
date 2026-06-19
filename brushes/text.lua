@@ -133,7 +133,7 @@ function brush.preview(ctx, width, height)
     "click then type",
     "enter commit",
     "esc cancel",
-    "1+ 2- 0 reset",
+    "[1]+ [2]- [0] reset",
   }, "\n")
 end
 

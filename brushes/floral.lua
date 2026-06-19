@@ -61,8 +61,8 @@ function brush.preview(ctx, width, height)
     " " .. p.petals[1] .. p.centers[1] .. p.petals[1],
     "floral " .. p.name,
     "grows attached",
-    "1+ 2- size",
-    "3 palette r=" .. tostring(radius),
+    "[1]+ [2]- size",
+    "[3] pal [0] reset",
   }, "\n")
 end
 

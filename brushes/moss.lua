@@ -61,8 +61,8 @@ function brush.preview(ctx, width, height)
     " " .. p.fronds[1] .. p.knots[1] .. p.fronds[1],
     "moss " .. p.name,
     "grows attached",
-    "1+ 2- size",
-    "3 palette r=" .. tostring(radius),
+    "[1]+ [2]- size",
+    "[3] pal [0] reset",
   }, "\n")
 end
 

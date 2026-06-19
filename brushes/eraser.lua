@@ -36,8 +36,8 @@ function brush.preview(ctx, width, height)
     "            ",
     "   erase    ",
     "  radius " .. tostring(radius),
-    "1 bigger   ",
-    "2 smaller  ",
+    "[1] bigger ",
+    "[2] small [0] reset",
   }, "\n")
 end
 

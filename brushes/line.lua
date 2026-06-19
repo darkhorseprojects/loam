@@ -75,7 +75,7 @@ function brush.preview(ctx, width, height)
   return table.concat({
     preview_pattern(),
     "line " .. s.name,
-    "1 style",
+    "[1] style [0] reset",
     "h v diag",
     "release set",
   }, "\n")
