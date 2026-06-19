@@ -1,6 +1,6 @@
 # brush api
 
-a brush is one Lua file in `./brushes`, `~/.config/loam/brushes`, `~/.local/share/loam/brushes`, or the system share dirs. it returns a table:
+A brush is one Lua file. It returns a table.
 
 ```lua
 local brush = {
@@ -10,7 +10,7 @@ local brush = {
 }
 
 function brush.preview(ctx, width, height)
-  return "lua-rendered\npreview frame"
+  return "preview text"
 end
 
 function brush.paint(ctx, event)
@@ -18,249 +18,96 @@ end
 
 return brush
 ```
-
-`paint(ctx, event)` owns brush behavior. `preview(ctx, width, height)` returns the text frame shown in the corner preview area; Zig only positions that returned text.
-
-## ownership
-
-the brush owns:
-
-- glyph choices
-- number-key meanings
-- press/move/release behavior
-- staged preview contents
-- animation opt-in through `animated = true`
-- particle behavior when using `ctx.emit`
-
-Zig owns:
-
-- terminal IO
-- canvas/world memory
-- particles storage
-- selection/copy/paste/move
-- visual move overlays
-- brush discovery
-- event routing
-- diff rendering and flushing
-
-Lua brushes are trusted local code. do not install brushes from sources you do not trust.
 
 ## coordinates
 
-all coordinates are 1-based terminal cells.
+Coordinates are 1-based cells. Use `event.world_x` / `event.world_y` for painting.
+
+## ctx
 
 ```lua
-ctx.set(1, 1, "*")
-ctx.emit(10, 5, "·", 2, 0.2, -0.1)
-```
-
-use `event.world_x` and `event.world_y` for painting. `event.x` and `event.y` are viewport coordinates.
-
-## drawing
-
-```lua
-ctx.set(x, y, glyph)        -- returns true if the cell exists
-local glyph = ctx.get(x, y) -- returns " " outside the canvas
+ctx.set(x, y, glyph)
+ctx.get(x, y)
 ctx.line(x0, y0, x1, y1, glyph)
 ctx.fill(x, y, width, height, glyph)
-ctx.rect(x, y, width, height, edge_glyph, fill_glyph_or_nil)
-ctx.clear()                 -- clears canvas and particles
-ctx.requestText(label)      -- asks the engine to capture text input
-```
-
-`glyph` is a Lua string. the canvas stores up to 8 UTF-8 bytes per cell. Prefer `line`, `fill`, and `rect` for hot paths: Lua chooses the brush intent, Zig touches cells in bulk.
-
-## staged previews
-
-use the stage for temporary drag previews:
-
-```lua
+ctx.rect(x, y, width, height, edge, fill_or_nil)
 ctx.stageSet(x, y, glyph)
 ctx.stageClear()
 ctx.commitStage()
-```
-
-staged cells are visible but not permanent until `ctx.commitStage()`.
-
-default behavior:
-
-- `box` and `line` use staged previews while dragging
-- release commits the stage
-- number keys during a drag should clear and redraw the preview
-
-## particles
-
-spawn:
-
-```lua
+ctx.clear()
+ctx.requestText(label)
 ctx.emit(x, y, glyph, ttl, vx, vy)
-```
-
-read:
-
-```lua
-local ok, x, y, vx, vy, glyph, ttl, age, seed = ctx.getParticle(i)
-```
-
-write:
-
-```lua
+ctx.particleCount()
+ctx.getParticle(i)
 ctx.setParticle(i, x, y, vx, vy, glyph, ttl, age)
-```
-
-remove:
-
-```lua
 ctx.removeParticle(i)
+ctx.eachParticle(fn)
+ctx.time()
+ctx.dt()
+ctx.random()
+ctx.randomRange(a, b)
 ```
 
-iterate:
-
-```lua
-ctx.eachParticle(function(i)
-  local ok, x, y, vx, vy, glyph, ttl, age, seed = ctx.getParticle(i)
-  if not ok then return end
-
-  -- update brush state here
-  ctx.setParticle(i, x, y, vx, vy, glyph, ttl, age)
-end)
-```
-
-the particle array is owned by Zig. Lua gets stable index handles and reads/writes fields through the boundary instead of allocating a Lua table per particle per frame.
-
-## time and randomness
-
-```lua
-local t = ctx.time()
-local dt = ctx.dt()
-local r = ctx.random()
-local v = ctx.randomRange(0, 10)
-```
+Glyphs are Lua strings. A cell stores up to 8 UTF-8 bytes.
 
 ## events
 
-mouse:
+Mouse:
 
 ```lua
-if event.type == "mouse" and event.button == "left" and event.action ~= "release" then
-  ctx.emit(event.x, event.y, "*", 3, 0, 0)
-end
+{
+  type = "mouse",
+  button = "left",
+  action = "press",
+  x = 1,
+  y = 1,
+  world_x = 1,
+  world_y = 1,
+}
 ```
 
-frame:
+Digit:
 
 ```lua
-if event.type == "frame" then
-  ctx.eachParticle(function(i)
-    -- update particles
-  end)
-end
+{ type = "digit", digit = 1 }
 ```
 
-paste:
+Paste:
 
 ```lua
-if event.type == "paste" then
-  local x = event.x
-  local y = event.y
-  local text = event.text
-  local positioned = event.positioned
-end
+{ type = "paste", x = 1, y = 1, text = "..." }
 ```
 
-text capture:
+Frame:
 
 ```lua
--- request capture from any brush event, usually a mouse press
+{ type = "frame", dt = 0.016, time = 12.34 }
+```
+
+Text capture:
+
+```lua
 ctx.requestText("text")
 
-if event.type == "text" then
-  if event.action == "input" then
-    ctx.set(x, y, event.text) -- one engine-captured character
-  elseif event.action == "backspace" then
-    -- erase brush-owned previous placement
-  elseif event.action == "submit" then
-    -- finish input
-  elseif event.action == "cancel" then
-    -- end input without reading terminal state directly
-  end
-end
+{ type = "text", action = "input", text = "a" }
+{ type = "text", action = "backspace", text = "" }
+{ type = "text", action = "submit", text = "typed text" }
+{ type = "text", action = "cancel", text = "typed text" }
 ```
 
-Lua never reads terminal input directly. the engine records the text buffer, displays the status line, and sends text events through `paint`.
-
-resize:
-
-```lua
-if event.type == "resize" then
-  local w = event.width
-  local h = event.height
-end
-```
-
-digit:
-
-```lua
-if event.type == "digit" then
-  -- works while a drag preview is active
-  state.variant = event.digit
-end
-```
-
-key:
-
-```lua
-if event.type == "key" and event.key == "b" then
-  -- brush-local behavior
-end
-```
-
-## animation
-
-by default, brushes are not animated.
-
-a brush gets `frame` events only when:
-
-- the active brush has `animated = true`, or
-- live particles exist.
-
-holding the mouse still does not repeatedly call `paint`. if a brush wants continuous behavior while held still, it should track its own held state and opt into frames.
-
-```lua
-local brush = { name = "drip", glyph = "·", animated = true }
-local held = nil
-
-function brush.paint(ctx, event)
-  if event.type == "mouse" and event.button == "left" then
-    if event.action == "press" then held = { x = event.world_x, y = event.world_y } end
-    if event.action == "move" and held then held = { x = event.world_x, y = event.world_y } end
-    if event.action == "release" then held = nil end
-  end
-
-  if event.type == "frame" and held then
-    ctx.set(held.x, held.y, brush.glyph)
-  end
-end
-
-return brush
-```
+Lua never reads terminal input directly.
 
 ## shipped brush controls
 
-- `0`: reset bundled brush state to defaults
+- `0`: reset bundled brush state
 - `box`: `1` style, `2` corner, `3` fill, `4` edge pattern
-- `line`: `1` style; styles include horizontal, vertical, diagonal, and reverse-diagonal glyph variants
+- `line`: `1` style
 - `eraser`: `1` larger, `2` smaller
-- `seed`: animated sprout placement
 - `soil`: `1` larger, `2` smaller, `3` palette
-- `moss`, `floral`: `1` larger, `2` smaller, `3` palette; growth attaches to nearby cells
-- `text`: `1` larger text mode, `2` smaller text mode; mouse press starts engine-owned text capture
-- `particles`: animated particle burst
+- `moss`, `floral`: `1` larger, `2` smaller, `3` palette
+- `text`: `1` larger text mode, `2` smaller text mode
+- `particles`: `1` glyph
 
-## preview cache
+## animation
 
-`brush.preview(ctx, width, height)` is called by the brush host after brush load or brush events, not by the renderer. rendering never calls Lua. returned preview text is copied into a Zig-owned preview cache.
-
-## brush inventory
-
-Each brush file is loaded once per app session and cached by path. Switching brushes reselects the cached Lua table, so brush-local state persists until loam exits.
+Set `animated = true` to receive `frame` events. Live particles also keep frame events running.

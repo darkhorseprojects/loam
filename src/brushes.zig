@@ -89,8 +89,10 @@ fn lessThanName(_: void, a: []const u8, b: []const u8) bool {
 fn appendUserBrushDirs(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, paths: *std.ArrayList([]const u8)) !void {
     if (env.get("XDG_CONFIG_HOME")) |base| try appendJoinedBrushDir(allocator, io, paths, base, "loam/brushes");
     if (env.get("HOME")) |home| try appendJoinedBrushDir(allocator, io, paths, home, ".config/loam/brushes");
+    if (env.get("APPDATA")) |base| try appendJoinedBrushDir(allocator, io, paths, base, "loam/brushes");
     if (env.get("XDG_DATA_HOME")) |base| try appendJoinedBrushDir(allocator, io, paths, base, "loam/brushes");
     if (env.get("HOME")) |home| try appendJoinedBrushDir(allocator, io, paths, home, ".local/share/loam/brushes");
+    if (env.get("LOCALAPPDATA")) |base| try appendJoinedBrushDir(allocator, io, paths, base, "loam/brushes");
 }
 
 fn appendJoinedBrushDir(allocator: std.mem.Allocator, io: std.Io, paths: *std.ArrayList([]const u8), base: []const u8, suffix: []const u8) !void {

@@ -1,153 +1,58 @@
 # system
 
-`loam` is split into engine primitives and brush-owned behavior.
+## ownership
 
-## terminal.zig
+- canvas: durable cells and particles
+- Lua bridge: active brush VM, ctx API, cached preview
+- renderer: visible frame, overlays, selection, move preview, status lines, diffing
+- terminal backend: raw input/output and size
+- app loop: routing, brush switching, text capture, clipboard, escape semantics
 
-native ANSI/SGR terminal handling:
+Rendering never calls Lua.
 
-- alternate screen
-- hidden cursor
-- raw mode
-- POSIX `TIOCGWINSZ` terminal sizing
-- SGR mouse reporting `?1002h`, `?1003h`, and `?1006h`
-- mouse wheel as brush-cycle input
-- paste detection
-- bracketed paste `?2004h`
-- resize events
-- monotonic time and sleep
+## brush lookup
 
-no TUI framework is used.
+First matching file stem wins:
 
-## canvas.zig
+```text
+./brushes
+$XDG_CONFIG_HOME/loam/brushes
+~/.config/loam/brushes
+%APPDATA%/loam/brushes
+$XDG_DATA_HOME/loam/brushes
+~/.local/share/loam/brushes
+%LOCALAPPDATA%/loam/brushes
+/usr/local/share/loam/brushes
+/usr/share/loam/brushes
+```
 
-owns durable canvas data:
+## text input
 
-- terminal-cell grid
-- UTF-8 cell storage
-- persistent world plus viewport
-- Lua brush stage preview layer
-- particle array
+Lua calls `ctx.requestText(label)`. The engine captures keys, shows a top-left status line, and sends `text` events through `paint`. Lua does not read stdin.
 
-the canvas does not know about brushes, selection, moves, or terminal output. it only stores cells and particles.
+Status lines stack top-left, so text input and escape clear countdown do not overlap.
 
-## lua_bridge.zig
+## platform
 
-owns the Lua VM and boundary:
+Release assets:
 
-- creates one `ctx` table per paint call
-- pushes lightweight event tables
-- exposes per-cell drawing, bulk drawing, particles, time, random, and size
-- loads the selected brush file
-- calls `brush.paint(ctx, event)`
-- calls `brush.preview(ctx, width, height)` for the corner panel
+```text
+linux x86_64
+linux aarch64
+macos aarch64
+macos x86_64
+windows x86_64
+```
 
-Lua never reaches into Zig memory directly. Zig never encodes brush behavior.
+FreeBSD x86_64 is compile-checked. BSD release assets are not published.
 
-## renderer.zig
+## MCP
 
-owns the visible terminal frame:
+`loam --mcp` and `loam-mcp` expose one tool: `loam_apply_selection`.
 
-- builds base cells from canvas and brush stage
-- applies particles
-- applies moving-selection overlay without mutating the world
-- applies preview/countdown UI
-- applies selection reverse-video last
-- diffs the next frame against the previous frame
-- writes only changed terminal cells
+Modes:
 
-terminal output remains single-writer. compute can become worker-backed later, but renderer state is still one owner.
+- `fill`: rectangle fill, target-char fill in rectangle, or connected target-char section fill
+- `path`: continuous path through points
 
-## main.zig
-
-owns the app loop:
-
-- parse args
-- initialize terminal
-- initialize canvas and Lua VM
-- load all brushes from `brushes/`
-- route input
-- scroll wheel cycles the active brush and reloads Lua
-- maintain internal clipboard
-- run frame events only when needed
-- ask the renderer to diff and patch visible cells after input/frame ticks
-- handle escape cancel and repeated-escape clear countdown
-
-## brush set
-
-`brushes.zig` owns folder discovery:
-
-- list `.lua` files in `brushes/`
-- sort names
-- read `brush.name` and `brush.glyph` for preview metadata
-- keep an active index
-- support folder-relative initial brush selection with `--brush=name`
-
-all brush code still comes from the folder. the host only switches which file is loaded.
-
-## copy/paste
-
-right drag selects a rectangle. right release copies the selected cells as text into:
-
-1. the internal loam clipboard
-2. OSC 52 system clipboard when the terminal accepts it
-
-middle click or `v` pastes the internal clipboard as a Lua `paste` event.
-
-left drag inside a right-click selection moves those cells through a visual overlay. the world is not changed until release commits the move.
-
-## color
-
-there is no color model. selection highlight is reverse video only. brush scripts may write any glyph string supported by the terminal font.
-
-## memory model
-
-loam uses a long-lived arena for app-owned data and keeps per-frame allocations small:
-
-- canvas cells, particles, brush lists, and preview buffer capacity are reused
-- Lua brush file contents are freed after load
-- MCP messages use a freeing allocator and deinitialize parsed JSON
-- particles are stored in a Zig array; Lua receives numeric indices instead of allocating per-particle Lua tables
-- staged previews are a fixed-size canvas layer, not a Lua table of cells
-- moved selections are rendered as an overlay, not written into the canvas stage
-
-## input and security boundary
-
-- Zig owns terminal IO, canvas memory, particles, selection, clipboard, and routing.
-- Lua owns brush-local state, glyph choices, placement decisions, preview content, number-key behavior, and animation policy.
-- a brush receives plain event tables and a small `ctx` API. it does not get Zig pointers, filesystem handles, network access, or process spawning from loam.
-- Lua brushes are still trusted local code. the embedded Lua VM is initialized with standard Lua libraries, so a malicious brush can still do Lua-side damage inside the process.
-- a future sandbox mode can tighten this further by opening only the functions loam explicitly exposes.
-
-## platform model
-
-terminal IO is split by backend:
-
-- `terminal_posix.zig` handles Linux, macOS, and BSD-style `TIOCGWINSZ` targets
-- `terminal_windows.zig` handles Windows console mode setup, VT output, VT input, and console sizing
-- `terminal_ansi.zig` owns shared ANSI mode strings and SGR mouse parsing
-- `terminal_types.zig` owns shared events, keys, mouse events, paste events, and sizes
-
-release assets are currently built for:
-
-- Linux x86_64
-- Linux aarch64
-- macOS aarch64
-- macOS x86_64
-- Windows x86_64
-
-FreeBSD x86_64 is source-build checked, but no BSD release asset is published until runtime behavior is tested in a BSD terminal. Windows x86_64 is build/release checked; interactive mouse/terminal UX still needs manual validation in Windows Terminal before calling it polished.
-
-## renderer / Lua boundary update
-
-rendering never calls Lua. `lua_bridge.zig` rebuilds the preview cache after brush load or brush events. `renderer.zig` consumes cached cells and engine status lines only.
-
-`canvas.zig` now owns durable cells and particles only. brush drag previews use a renderer-owned overlay; moving selections use a separate move overlay. neither is written into the durable canvas until an explicit commit/release. status lines such as text input and escape clear are stacked by the renderer at the top-left so they do not overlap.
-
-## text input boundary
-
-Lua brushes request text capture with `ctx.requestText(label)`. the app loop owns the terminal input buffer, top-left status text, enter/escape handling, and per-character dispatch. Lua receives only ordinary `paint(ctx, event)` calls with `event.type == "text"`; it never reads stdin or listens to the terminal directly.
-
-## brush inventory
-
-`lua_bridge.zig` keeps `__loam_inventory[path] = brush_table` in the Lua VM. Brush switching reuses the cached table instead of reloading the file, so brush state survives until process exit. bundled brushes use `0` to reset their cached state to defaults.
+MCP edits text files only. It does not control a live editor session.
