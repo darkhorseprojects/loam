@@ -176,4 +176,4 @@ If `target_char` finds multiple disconnected sections, specify `target.line` and
 - Windows builds and releases exist; interactive Windows Terminal UX still needs manual testing
 - BSD release assets are not published
 
-current version: **0.1.10**
+current version: **0.1.11**
